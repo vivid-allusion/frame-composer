@@ -1,4 +1,4 @@
-# Fal Profile 
+# Replicate
 
 # Model endpoint (required)
 endpoint: "google/nano-banana-2"
@@ -20,5 +20,5 @@ parameters:
   safety_filter_level: "block_only_high"
 
 # Fixes
-#prompt_prefix: 'A moody, cinematic scene from the '
-#prompt_suffix: 'Handheld shot on 35mm film with cinematic lighting. Diagonal room composition.'
+prompt_prefix: 'A cinematic scene from a historical feature film in color.'
+prompt_suffix: 'As if shot on 35mm film by Sir Roger Deakins with diagonal composition.'
