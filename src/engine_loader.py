@@ -1,7 +1,8 @@
-"""Vendored Engine discovery and loading.
+"""Canonical Engine discovery and loading.
 
-Snapshot from pipeline/engine_loader.py in studiolot.
-Update the studiolot canonical copy first, then re-vendor.
+Per ENGINE_CONTRACT.md §7a: this is the single canonical implementation of
+load_engine(). Vehicle repos vendor a snapshot copy — update here first,
+then re-vendor.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ def load_engine(
 
     Args:
         platform: Engine platform name (e.g. "replicate", "fal").
-                  None -> defaults to "replicate" (old-profile backward compat).
+                  None → defaults to "replicate" (old-profile backward compat).
         search_paths: Directories to search for ``engine-<platform>/``.
         profile: Parsed profile YAML dict.
         output_dir: Where generated files are written.
@@ -56,26 +57,26 @@ def load_engine(
             f"Engine '{resolved}' not found. Searched:\n  {searched}"
         )
 
-    parent = str(engine_dir.parent)
-    if parent not in sys.path:
-        sys.path.insert(0, parent)
+    root = str(engine_dir)
+    if root not in sys.path:
+        sys.path.insert(0, root)
 
     import importlib
+    import importlib.util
 
     pkg_name = f"engine_{resolved}"
-    try:
-        pkg = importlib.import_module(pkg_name)
-    except ImportError:
-        try:
-            import importlib.util
 
-            spec = importlib.util.spec_from_file_location(
-                pkg_name, engine_dir / "__init__.py"
-            )
-            pkg = importlib.util.module_from_spec(spec)
-            sys.modules[pkg_name] = pkg
-            spec.loader.exec_module(pkg)
-        except Exception:
+    spec = importlib.util.spec_from_file_location(
+        pkg_name, engine_dir / pkg_name / "__init__.py"
+    )
+    if spec is not None:
+        pkg = importlib.util.module_from_spec(spec)
+        sys.modules[pkg_name] = pkg
+        spec.loader.exec_module(pkg)
+    else:
+        try:
+            pkg = importlib.import_module(pkg_name)
+        except ImportError:
             raise ImportError(
                 f"Engine package '{pkg_name}' found at {engine_dir} but cannot be "
                 f"imported. Check requirements: pip install -r "

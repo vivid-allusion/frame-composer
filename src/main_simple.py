@@ -27,8 +27,8 @@ from .utils.logging import setup_logging
 ENGINE_INSTALL_MESSAGE = (
     "To install an Engine:\n"
     "  git clone https://github.com/vivid-allusion/engine-replicate.git "
-    "ENGINES/replicate/\n"
-    "  pip install -r ENGINES/replicate/requirements.txt\n\n"
+    "ENGINES/engine-replicate/\n"
+    "  pip install -r ENGINES/engine-replicate/requirements.txt\n\n"
     "Or install via pip:\n"
     "  pip install engine-replicate\n\n"
     "Set your API key in .env:  REPLICATE_API_TOKEN=r8_...\n"
