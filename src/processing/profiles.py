@@ -41,7 +41,7 @@ def load_profile_standalone() -> dict[str, Any]:
     if not yamls:
         raise ConfigurationError(
             "No active profile in USER-FILES/03.PROFILES/.\n"
-            "Copy a YAML from USER-FILES/02.STANDBY/ into 03.PROFILES/"
+            "Copy a YAML from USER-FILES/02.STANDBY/ into USER-FILES/03.PROFILES/"
         )
     return _parse_profile_yaml(yamls[0])
 

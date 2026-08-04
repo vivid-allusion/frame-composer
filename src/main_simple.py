@@ -248,7 +248,7 @@ def _run_standalone(args) -> int:
             "No active profile in USER-FILES/03.PROFILES/.\n"
             "Copy a YAML from USER-FILES/02.STANDBY/ to "
             "USER-FILES/03.PROFILES/ and re-run.\n"
-            + (f"Available on the shelf: {shelf_names}" if shelf_names else "")
+            + (f"Available in USER-FILES/02.STANDBY/: {shelf_names}" if shelf_names else f"No profiles in USER-FILES/02.STANDBY/ either — install an engine first.")
         ) from None
 
     profile = _apply_cli_overrides(profile, args)
