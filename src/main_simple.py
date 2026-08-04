@@ -60,8 +60,8 @@ def _read_bullets(input_dir: Path) -> list[Bullet]:
             logger.warning(f"Failed to extract URLs from {md_path.name}: {e}")
         bullets.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
     if not bullets:
-        logger.error(f"No .md files found in {input_dir}")
-        raise FileNotFoundError(f"No .md files found in {input_dir}")
+        logger.warning(f"No .md files found in {input_dir}")
+        return bullets
     logger.info(f"Discovered {len(bullets)} bullet(s) in {input_dir}")
     return bullets
 
@@ -242,6 +242,12 @@ def _run_standalone(args) -> int:
             "to auto-install the default Engine."
         )
         return 1
+
+    if not bullets:
+        logger.warning(
+            f"No .md files to process. Add bullet files to {input_path} and re-run."
+        )
+        return 0
 
     return _execute_pipeline(bullets, engine, platform)
 
