@@ -122,7 +122,15 @@ main() → _run_studiolot() / _run_standalone()
 
 ## Session History
 
-### 2026-08-04 — Systematic Refactor (31/33 tasks)
+### 2026-08-04 — Session 2: Refactor Report Execution (16/16 tasks)
+- Applied all items from `USER-FILES/07.TEMP/260804_000000_refactor_report.md`
+- **High (3):** Silent error swallowing → `logger.warning`, missing CLI overrides in studiolot mode → fixed, `_build_inputs` dynamic import → try/except
+- **Medium (5):** `_call_load_engine()` extracted to DRY `_load_engine_or_install`, `_resolve_engine_for_studiolot()` extracted (28→SRP split), `_handle_preflight_checks()` extracted from `_run_standalone`, dead `config` param removed from path_resolver, `ENGINE_INSTALL_MESSAGE` parameterised
+- **Low (8):** Return types `-> int` added, `SUPPORTED_PLATFORMS` consolidated in auth, `MAX_WALK_DEPTH` → default param, emoji → plain text in run.py, `_GENAI` suffix, `_handle_subprocess_error()` extracted in run.py, Replicate default removed from `get_api_token_from_env()`
+- Tests updated: `test_path_resolver.py` signatures and `_GENAI` assertion
+- 5 source files modified, 1 test file updated, all pass `ast.parse()`
+
+### 2026-08-04 — Session 1: Systematic Refactor (31/33 tasks)
 - Source: 1,173 → 964 lines (-17.7%)
 - Tests: 0 → 153 lines (4 test files: markdown_parser, engine_loader, auth, path_resolver)
 - Deleted: `src/processing/discovery.py` (154L dead), 5 dead deps, 5 dead constants
@@ -140,12 +148,23 @@ main() → _run_studiolot() / _run_standalone()
 ### Remaining (2026-08-04)
 - `load_engine()` has 6 parameters — future EngineLoadContext dataclass candidate
 - No conftest.py / pytest configuration — tests use manual path manipulation
-- run.py uses emoji in user-facing output
-- `_build_inputs()` uses `InputFile` from engine — tight coupling, implicit contract
-- `_run_studiolot()` does not apply CLI overrides (`--force-png`, `--no-save-payloads`)
-- Output suffix `_IMG-TO-IMG` is hardcoded despite text-to-image support
+- `_build_inputs()` uses `InputFile` from engine — tight coupling (now with error handling, but still implicit contract — consider a protocol/ABC)
+- `_run_studiolot()` (28 lines) and `_run_standalone()` (38 lines) slightly exceed 25-line guideline — function extraction already applied; remaining tight coupling is inherent to orchestration flow
 
-### Resolved
+### Resolved (Session 2)
+- run.py emoji → plain text: `[REPAIR]`, `[INSTALL]`, `[OK]`, `[ERROR]`, `[WARN]`
+- `_run_studiolot()` now applies CLI overrides via `_apply_cli_overrides(profile, args)` at line 289
+- Output suffix `_IMG-TO-IMG` → `_GENAI` in path_resolver.py
+- `_read_bullets()`: silent `pass` → `logger.warning` for prompt/URL extraction failures
+- `_load_engine_or_install()`: duplicate `load_engine()` call → extracted `_call_load_engine()` helper
+- `resolve_input_path()` / `resolve_output_base_path()`: dead `config` parameter removed
+- `MAX_WALK_DEPTH` constant → default parameter in `_find_project_engines_dir()`
+- `SUPPORTED_PLATFORMS` duplicated in two files → consolidated in `auth/__init__.py`, derived from `_PLATFORM_KEY_MAP`
+- `get_api_token_from_env()`: Replicate-specific default removed
+- `run.py`: duplicate subprocess error handling → `_handle_subprocess_error()` helper
+- All entry functions (`main`, `_run_studiolot`, `_run_standalone`) now have `-> int` return type annotations
+
+### Resolved (Session 1)
 - Engine interface migration: all provider SDKs loaded via `load_engine()` instead of direct import
 - Dead code purge: ~186 lines removed (discovery.py, dead imports, dead constants, dead exceptions)
 - Profile dict mutation: replaced with `_apply_cli_overrides()` returning a copy

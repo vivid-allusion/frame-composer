@@ -22,6 +22,8 @@ _PLATFORM_KEY_MAP: dict[str, str] = {
     "google": "GOOGLE_API_KEY",
 }
 
+SUPPORTED_PLATFORMS: list[str] = list(_PLATFORM_KEY_MAP.keys())
+
 
 def _key_name(platform: str) -> str:
     return _PLATFORM_KEY_MAP.get(platform, f"{platform.upper()}_API_KEY")
@@ -70,4 +72,4 @@ def get_api_key(platform: str = "replicate") -> str:
     )
 
 
-__all__ = ["get_api_key"]
+__all__ = ["get_api_key", "SUPPORTED_PLATFORMS"]

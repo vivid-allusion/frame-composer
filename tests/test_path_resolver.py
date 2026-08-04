@@ -13,29 +13,29 @@ from src.utils.path_resolver import (
 
 class TestResolveInputPath:
     def test_default_fallback_to_user_files(self):
-        input_path, project = resolve_input_path({}, {})
+        input_path, project = resolve_input_path({})
         assert input_path == Path("USER-FILES/04.INPUT")
         assert project is None
 
     def test_custom_path_from_profile(self):
         profile = {"paths": {"input": "/tmp/test_input"}, "project": "myproj"}
-        input_path, project = resolve_input_path({}, profile)
+        input_path, project = resolve_input_path(profile)
         assert input_path == Path("/tmp/test_input")
         assert project == "myproj"
 
     def test_raises_if_path_missing(self):
         with pytest.raises(FileNotFoundError, match="Input directory not found"):
-            resolve_input_path({}, {"paths": {"input": "/nonexistent/path"}})
+            resolve_input_path({"paths": {"input": "/nonexistent/path"}})
 
 
 class TestResolveOutputBasePath:
     def test_default_fallback_to_user_files(self):
-        output_base = resolve_output_base_path({}, {})
+        output_base = resolve_output_base_path({})
         assert output_base == Path("USER-FILES/05.OUTPUT")
 
     def test_custom_path_from_profile(self):
         profile = {"paths": {"output": "/tmp/test_output"}}
-        output_base = resolve_output_base_path({}, profile)
+        output_base = resolve_output_base_path(profile)
         assert output_base == Path("/tmp/test_output")
 
 
@@ -47,4 +47,4 @@ class TestCreateTimestampedOutputPath:
             assert output.parent == base
             assert output.exists()
             assert output.is_dir()
-            assert "_IMG-TO-IMG" in output.name
+            assert "_GENAI" in output.name

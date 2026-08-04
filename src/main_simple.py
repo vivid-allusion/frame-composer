@@ -28,20 +28,6 @@ from .utils.path_resolver import (
     resolve_output_base_path,
 )
 
-ENGINE_INSTALL_MESSAGE = (
-    "To install an Engine:\n"
-    "  git clone https://github.com/vivid-allusion/engine-replicate.git "
-    "ENGINES/engine-replicate/\n"
-    "  pip install -r ENGINES/engine-replicate/requirements.txt\n\n"
-    "Or install via pip:\n"
-    "  pip install engine-replicate\n\n"
-    "Set your API key in .env:  REPLICATE_API_TOKEN=r8_...\n"
-)
-
-SUPPORTED_PLATFORMS = ["replicate", "fal", "openrouter", "google"]
-MAX_WALK_DEPTH = 10
-
-
 # ── shared helpers ──────────────────────────────────────────────────────────
 
 
@@ -54,13 +40,13 @@ def _read_bullets(input_dir: Path) -> list[dict[str, Any]]:
         prompt = ""
         try:
             prompt = extract_prompt_text(content)
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.warning(f"Failed to extract prompt from {md_path.name}: {e}")
         urls: list[str] = []
         try:
             urls = extract_all_image_urls(content)
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.warning(f"Failed to extract URLs from {md_path.name}: {e}")
         bullets.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
     if not bullets:
         logger.error(f"No .md files found in {input_dir}")
@@ -94,10 +80,10 @@ def _load_profile_studiolot(profile_path: Path) -> dict[str, Any]:
     return data
 
 
-def _find_project_engines_dir(start_dir: Path) -> Path | None:
+def _find_project_engines_dir(start_dir: Path, max_depth: int = 10) -> Path | None:
     """Walk up from start_dir looking for 00_APPLICATIONS/ENGINES/."""
     current = start_dir.resolve()
-    for _ in range(MAX_WALK_DEPTH):
+    for _ in range(max_depth):
         candidate = current / "00_APPLICATIONS" / "ENGINES"
         if candidate.is_dir():
             return candidate
@@ -113,10 +99,18 @@ def _find_vehicle_engines_dir() -> Path:
 
 
 def _print_engine_not_found(platform: str):
+    from .auth import _key_name
+
+    key_name = _key_name(platform)
     sys.stderr.write(
-        f"\nError: No Engine found for platform '{platform}'.\n"
-        f"Supported platforms: {', '.join(SUPPORTED_PLATFORMS)}\n\n"
-        f"{ENGINE_INSTALL_MESSAGE}"
+        f"\nError: No Engine found for platform '{platform}'.\n\n"
+        f"To install an Engine:\n"
+        f"  git clone https://github.com/vivid-allusion/engine-{platform}.git "
+        f"ENGINES/engine-{platform}/\n"
+        f"  pip install -r ENGINES/engine-{platform}/requirements.txt\n\n"
+        f"Or install via pip:\n"
+        f"  pip install engine-{platform}\n\n"
+        f"Set your API key in .env:  {key_name}=...\n"
     )
 
 
@@ -155,8 +149,13 @@ def _auto_install_engine(platform: str) -> bool:
 
 def _build_inputs(bullets: list[dict[str, Any]], platform: str) -> list[Any]:
     """Construct InputFile objects using the Engine's datatype."""
-    pkg = importlib.import_module(f"engine_{platform}")
-    InputFile = pkg.InputFile
+    try:
+        pkg = importlib.import_module(f"engine_{platform}")
+        InputFile = pkg.InputFile
+    except (ImportError, AttributeError) as e:
+        raise ImportError(
+            f"Engine '{platform}' is missing or does not export InputFile: {e}"
+        ) from e
     return [
         InputFile(
             path=b["path"],
@@ -178,6 +177,23 @@ def _report_results(results: list[Any]) -> int:
     return 1 if failed else 0
 
 
+def _call_load_engine(
+    platform: str,
+    search_paths: list[Path],
+    profile: dict[str, Any],
+    output_dir: Path,
+    api_key: str | None,
+) -> Any:
+    return load_engine(
+        platform=platform,
+        search_paths=search_paths,
+        profile=profile,
+        output_dir=output_dir,
+        api_key=api_key,
+        on_progress=lambda msg: logger.info(msg),
+    )
+
+
 def _load_engine_or_install(
     platform: str,
     search_paths: list[Path],
@@ -188,14 +204,7 @@ def _load_engine_or_install(
 ) -> Any:
     """Load engine with optional auto-install fallback on FileNotFoundError."""
     try:
-        return load_engine(
-            platform=platform,
-            search_paths=search_paths,
-            profile=profile,
-            output_dir=output_dir,
-            api_key=api_key,
-            on_progress=lambda msg: logger.info(msg),
-        )
+        return _call_load_engine(platform, search_paths, profile, output_dir, api_key)
     except FileNotFoundError:
         if not auto_install:
             raise
@@ -204,14 +213,7 @@ def _load_engine_or_install(
             raise FileNotFoundError(
                 f"Failed to auto-install engine '{auto_install}'"
             )
-        return load_engine(
-            platform=platform,
-            search_paths=search_paths,
-            profile=profile,
-            output_dir=output_dir,
-            api_key=api_key,
-            on_progress=lambda msg: logger.info(msg),
-        )
+        return _call_load_engine(platform, search_paths, profile, output_dir, api_key)
 
 
 def _apply_cli_overrides(profile: dict[str, Any], args: Any) -> dict[str, Any]:
@@ -227,7 +229,7 @@ def _apply_cli_overrides(profile: dict[str, Any], args: Any) -> dict[str, Any]:
 # ── entry point ─────────────────────────────────────────────────────────────
 
 
-def main():
+def main() -> int:
     args = parse_args()
     is_studiolot = bool(args.profile or args.input_dir or args.output_dir)
     setup_logging(debug=args.debug)
@@ -258,6 +260,21 @@ def main():
 # ── run modes ───────────────────────────────────────────────────────────────
 
 
+def _resolve_engine_for_studiolot(
+    output_dir: Path,
+    platform: str,
+    profile: dict[str, Any],
+    api_key: str | None,
+) -> Any:
+    project_engines = _find_project_engines_dir(output_dir)
+    if not project_engines:
+        raise FileNotFoundError(
+            "Engine directory not found. Expected 00_APPLICATIONS/ENGINES/ "
+            "under the project root."
+        )
+    return _call_load_engine(platform, [project_engines], profile, output_dir, api_key)
+
+
 def _run_studiolot(args) -> int:
     if not args.output_dir:
         raise ConfigurationError("--output_dir is required in studiolot mode")
@@ -269,6 +286,7 @@ def _run_studiolot(args) -> int:
         raise ConfigurationError("--profile is required in studiolot mode")
 
     profile = _load_profile_studiolot(profile_path)
+    profile = _apply_cli_overrides(profile, args)
     platform = profile.get("platform") or "replicate"
 
     input_dir = Path(args.input_dir) if args.input_dir else Path(".")
@@ -280,47 +298,14 @@ def _run_studiolot(args) -> int:
         return 0
 
     api_key = get_api_key(platform)
-
-    project_engines = _find_project_engines_dir(output_dir)
-    if not project_engines:
-        raise FileNotFoundError(
-            "Engine directory not found. Expected 00_APPLICATIONS/ENGINES/ "
-            "under the project root."
-        )
-
-    engine = load_engine(
-        platform=platform,
-        search_paths=[project_engines],
-        profile=profile,
-        output_dir=output_dir,
-        api_key=api_key,
-        on_progress=lambda msg: logger.info(msg),
-    )
+    engine = _resolve_engine_for_studiolot(output_dir, platform, profile, api_key)
 
     inputs = _build_inputs(bullets, platform)
     results = engine.run(inputs)
     return _report_results(results)
 
 
-def _run_standalone(args) -> int:
-    profile = _load_profile_standalone()
-    platform = profile.get("platform") or "replicate"
-
-    auto_install = args.install_default_engine or os.environ.get(
-        "STUDIOLOT_AUTO_INSTALL_ENGINE"
-    )
-
-    input_path, _ = resolve_input_path({}, profile)
-    output_base = resolve_output_base_path({}, profile)
-    output_dir = create_timestamped_output_path(output_base)
-
-    bullets = _read_bullets(input_path)
-
-    profile = _apply_cli_overrides(profile, args)
-    search_paths = [_find_vehicle_engines_dir()]
-
-    api_key = None if args.dry_run else get_api_key(platform)
-
+def _handle_preflight_checks(args, bullets: list[dict[str, Any]], profile: dict[str, Any]) -> int | None:
     if args.cost_estimation:
         total = len(bullets)
         cost = profile.get("pricing", {}).get("base_cost", 0.0)
@@ -332,6 +317,32 @@ def _run_standalone(args) -> int:
     if args.dry_run:
         logger.info(f"DRY RUN -- would process {len(bullets)} bullet(s)")
         return 0
+
+    return None
+
+
+def _run_standalone(args) -> int:
+    profile = _load_profile_standalone()
+    platform = profile.get("platform") or "replicate"
+
+    auto_install = args.install_default_engine or os.environ.get(
+        "STUDIOLOT_AUTO_INSTALL_ENGINE"
+    )
+
+    input_path, _ = resolve_input_path(profile)
+    output_base = resolve_output_base_path(profile)
+    output_dir = create_timestamped_output_path(output_base)
+
+    bullets = _read_bullets(input_path)
+
+    profile = _apply_cli_overrides(profile, args)
+    search_paths = [_find_vehicle_engines_dir()]
+
+    api_key = None if args.dry_run else get_api_key(platform)
+
+    early_exit = _handle_preflight_checks(args, bullets, profile)
+    if early_exit is not None:
+        return early_exit
 
     try:
         engine = _load_engine_or_install(

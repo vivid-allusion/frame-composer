@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -10,12 +10,12 @@ from src.constants import TIMESTAMP_FORMAT
 
 USER_FILES_INPUT = Path("USER-FILES/04.INPUT")
 USER_FILES_OUTPUT = Path("USER-FILES/05.OUTPUT")
-OUTPUT_DIR_SUFFIX = "_IMG-TO-IMG"
+OUTPUT_DIR_SUFFIX = "_GENAI"
 
 
 def resolve_input_path(
-    config: Dict[str, Any], profile: Dict[str, Any]
-) -> Tuple[Path, Optional[str]]:
+    profile: dict[str, Any],
+) -> tuple[Path, Optional[str]]:
     custom_input_path = profile.get("paths", {}).get("input")
     project_name = profile.get("project", "") if custom_input_path else None
 
@@ -33,7 +33,7 @@ def resolve_input_path(
 
 
 def resolve_output_base_path(
-    config: Dict[str, Any], profile: Dict[str, Any]
+    profile: dict[str, Any],
 ) -> Path:
     custom_output_path = profile.get("paths", {}).get("output")
 

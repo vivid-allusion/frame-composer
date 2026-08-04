@@ -43,6 +43,12 @@ def is_venv_valid(venv_path):
     return get_python_executable(venv_path) is not None
 
 
+def _handle_subprocess_error(e: subprocess.CalledProcessError):
+    print(f"[ERROR] Command failed: {e}")
+    print(f"Error output: {e.stderr.decode()}")
+    sys.exit(1)
+
+
 def find_or_create_venv():
     """Find existing valid venv or create/repair one."""
     script_dir = Path(__file__).parent
@@ -60,11 +66,11 @@ def find_or_create_venv():
     # Venv exists but is broken - repair it
     broken_venv = venv if venv.exists() else (venv_new if venv_new.exists() else None)
     if broken_venv:
-        print(f"🔧 Broken virtual environment detected at {broken_venv} - repairing...")
+        print(f"[REPAIR] Broken virtual environment detected at {broken_venv} - repairing...")
         shutil.rmtree(broken_venv)
 
     # Create fresh venv
-    print("📦 Creating virtual environment...")
+    print("[INSTALL] Creating virtual environment...")
 
     python_exec = find_python_executable()
     print(f"Using Python: {python_exec}")
@@ -74,23 +80,21 @@ def find_or_create_venv():
         subprocess.run(
             [python_exec, "-m", "venv", str(venv)], check=True, capture_output=True
         )
-        print("✅ Virtual environment created successfully")
+        print("[OK] Virtual environment created successfully")
         return venv
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to create virtual environment: {e}")
-        print(f"Error output: {e.stderr.decode()}")
-        sys.exit(1)
+        _handle_subprocess_error(e)
 
 
 def install_dependencies(python_exe, requirements_file):
     """Install or update dependencies from requirements.txt."""
     if not requirements_file.exists():
         print(
-            f"⚠️  Warning: {requirements_file} not found - skipping dependency installation"
+            f"[WARN] {requirements_file} not found - skipping dependency installation"
         )
         return
 
-    print("📦 Installing/updating dependencies from requirements.txt...")
+    print("[INSTALL] Installing/updating dependencies from requirements.txt...")
 
     try:
         # Upgrade pip quietly
@@ -115,11 +119,9 @@ def install_dependencies(python_exe, requirements_file):
             capture_output=True,
         )
 
-        print("✅ Dependencies installed successfully")
+        print("[OK] Dependencies installed successfully")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to install dependencies: {e}")
-        print(f"Error output: {e.stderr.decode()}")
-        sys.exit(1)
+        _handle_subprocess_error(e)
 
 
 def main():
@@ -133,7 +135,7 @@ def main():
     # Step 2: Get Python executable (guaranteed valid after find_or_create_venv)
     python_exe = get_python_executable(venv_path)
     if python_exe is None:
-        print(f"❌ Error: Virtual environment is invalid at {venv_path}")
+        print(f"[ERROR] Virtual environment is invalid at {venv_path}")
         sys.exit(1)
 
     # Step 3: Install/update dependencies
@@ -147,10 +149,10 @@ def main():
         result = subprocess.run(cmd)
         sys.exit(result.returncode)
     except KeyboardInterrupt:
-        print("\n⚠️  Interrupted by user")
+        print("\n[WARN] Interrupted by user")
         sys.exit(130)
     except Exception as e:
-        print(f"❌ Error running command: {e}")
+        print(f"[ERROR] Error running command: {e}")
         sys.exit(1)
 
 
