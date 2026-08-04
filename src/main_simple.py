@@ -31,7 +31,6 @@ from .exceptions import (
 )
 from .processing.markdown_parser import extract_all_image_urls, extract_prompt_text
 from .processing.profiles import (
-    activate_profile,
     list_standby,
     load_profile_standalone,
     load_profile_studiolot,
@@ -244,26 +243,13 @@ def _run_standalone(args) -> int:
         profile = load_profile_standalone()
         platform = profile.get("platform") or platform
     except ConfigurationError:
-        standby = list_standby()
-        if not standby or not sys.stdin.isatty():
-            raise
-        print("\nNo active profile in USER-FILES/03.PROFILES/.")
-        print("Available profiles on the STANDBY shelf:")
-        for i, p in enumerate(standby, 1):
-            print(f"  {i}. {p.stem}")
-        while True:
-            try:
-                choice = input(f"Activate profile [1-{len(standby)}]: ").strip()
-                idx = int(choice) - 1
-                if 0 <= idx < len(standby):
-                    break
-            except (ValueError, IndexError):
-                pass
-            print(f"Invalid choice. Enter 1-{len(standby)}.")
-        activated = activate_profile(standby[idx])
-        logger.success(f"Activated {activated.name} in 03.PROFILES/")
-        profile = load_profile_standalone()
-        platform = profile.get("platform") or platform
+        shelf_names = ", ".join(p.stem for p in list_standby())
+        raise ConfigurationError(
+            "No active profile in USER-FILES/03.PROFILES/.\n"
+            "Copy a YAML from USER-FILES/02.STANDBY/ to "
+            "USER-FILES/03.PROFILES/ and re-run.\n"
+            + (f"Available on the shelf: {shelf_names}" if shelf_names else "")
+        ) from None
 
     profile = _apply_cli_overrides(profile, args)
 
