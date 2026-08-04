@@ -143,7 +143,7 @@ def main() -> None:
     cmd = [str(python_exe), "-m", "src.main_simple"] + sys.argv[1:]
 
     try:
-        result = subprocess.run(cmd, stdin=None)
+        result = subprocess.run(cmd, stdin=sys.stdin)
         sys.exit(result.returncode)
     except KeyboardInterrupt:
         print("\n[WARN] Interrupted by user")

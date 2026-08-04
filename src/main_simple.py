@@ -195,38 +195,41 @@ def _run_studiolot(args) -> int:
 def _run_standalone(args) -> int:
     profile = load_profile_standalone()
     platform = profile.get("platform") or DEFAULT_PLATFORM
+    search_paths = [Path(__file__).resolve().parent.parent / "ENGINES"]
 
     auto_install = args.install_default_engine or os.environ.get(
         "STUDIOLOT_AUTO_INSTALL_ENGINE"
     )
 
-    input_path, _ = resolve_input_path(profile)
     output_base = resolve_output_base_path(profile)
     output_dir = create_timestamped_output_path(output_base)
 
-    bullets = _read_bullets(input_path)
-
     profile = _apply_cli_overrides(profile, args)
-    search_paths = [Path(__file__).resolve().parent.parent / "ENGINES"]
 
-    _handle_preflight_checks(args, bullets, profile)
-
-    # Stub 7: pre-check engine presence before API key
     has_engine = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
-    if not has_engine and not auto_install and not sys.stdin.isatty():
-        print_engine_not_found(platform)
-        return 1
 
-    # Stub 1: resolve API key with interactive wizard fallback
+    # ── setup phase ──────────────────────────────────────────────────────────
+
     api_key: str | None = None
-    if not args.dry_run:
+    if args.dry_run:
+        pass
+    elif not has_engine:
+        if sys.stdin.isatty():
+            platform, api_key = get_api_key_interactive()
+            profile["platform"] = platform
+            auto_install = platform
+        else:
+            print_engine_not_found(platform)
+            return 1
+    else:
         try:
             api_key = get_api_key(platform)
         except AuthenticationError:
             if sys.stdin.isatty():
                 platform, api_key = get_api_key_interactive()
                 profile["platform"] = platform
-                if not any((sp / f"engine-{platform}").is_dir() for sp in search_paths):
+                has_now = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
+                if not has_now:
                     auto_install = platform
             else:
                 raise
@@ -255,6 +258,12 @@ def _run_standalone(args) -> int:
             "run with --profile to specify one."
         )
         return 1
+
+    # ── processing phase ─────────────────────────────────────────────────────
+
+    input_path, _ = resolve_input_path(profile)
+    bullets = _read_bullets(input_path)
+    _handle_preflight_checks(args, bullets, profile)
 
     if not bullets:
         logger.warning(
