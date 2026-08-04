@@ -200,12 +200,49 @@ def _run_studiolot(args) -> int:
 
 def _run_standalone(args) -> int:
     search_paths = [Path(__file__).resolve().parent.parent / "ENGINES"]
+    platform = DEFAULT_PLATFORM
 
-    # ── active profile ────────────────────────────────────────────────────────
+    auto_install = args.install_default_engine or os.environ.get(
+        "STUDIOLOT_AUTO_INSTALL_ENGINE"
+    )
+
+    # ── engine check (must come first — seeds STANDBY) ───────────────────────
+
+    has_engine = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
+
+    api_key: str | None = None
+    if not args.dry_run and not has_engine:
+        if sys.stdin.isatty():
+            platform, api_key = get_api_key_interactive()
+            auto_install = platform
+        else:
+            print_engine_not_found(platform)
+            return 1
+
+    # ── engine install (before profile — populates STANDBY shelf) ────────────
+
+    profile = {"platform": platform}
+    output_base = resolve_output_base_path(profile)
+    output_dir = create_timestamped_output_path(output_base)
+    add_file_logging(output_dir)
+
+    try:
+        engine = load_engine_or_install(
+            platform, search_paths, profile, output_dir, api_key, auto_install
+        )
+    except FileNotFoundError:
+        print_engine_not_found(platform)
+        logger.info(
+            "Re-run with --install-default-engine=replicate "
+            "to auto-install the default Engine."
+        )
+        return 1
+
+    # ── active profile (STANDBY is now populated) ────────────────────────────
 
     try:
         profile = load_profile_standalone()
-        platform = profile.get("platform") or DEFAULT_PLATFORM
+        platform = profile.get("platform") or platform
     except ConfigurationError:
         standby = list_standby()
         if not standby or not sys.stdin.isatty():
@@ -226,57 +263,27 @@ def _run_standalone(args) -> int:
         activated = activate_profile(standby[idx])
         logger.success(f"Activated {activated.name} in 03.PROFILES/")
         profile = load_profile_standalone()
-        platform = profile.get("platform") or DEFAULT_PLATFORM
-
-    auto_install = args.install_default_engine or os.environ.get(
-        "STUDIOLOT_AUTO_INSTALL_ENGINE"
-    )
-
-    output_base = resolve_output_base_path(profile)
-    output_dir = create_timestamped_output_path(output_base)
-    add_file_logging(output_dir)
+        platform = profile.get("platform") or platform
 
     profile = _apply_cli_overrides(profile, args)
 
-    has_engine = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
+    # ── API key (engine existed but wizard was skipped) ──────────────────────
 
-    # ── setup phase ──────────────────────────────────────────────────────────
-
-    api_key: str | None = None
-    if args.dry_run:
-        pass
-    elif not has_engine:
-        if sys.stdin.isatty():
-            platform, api_key = get_api_key_interactive()
-            profile["platform"] = platform
-            auto_install = platform
-        else:
-            print_engine_not_found(platform)
-            return 1
-    else:
+    if not args.dry_run and has_engine and api_key is None:
         try:
             api_key = get_api_key(platform)
         except AuthenticationError:
             if sys.stdin.isatty():
                 platform, api_key = get_api_key_interactive()
                 profile["platform"] = platform
-                has_now = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
-                if not has_now:
-                    auto_install = platform
             else:
                 raise
 
-    try:
-        engine = load_engine_or_install(
-            platform, search_paths, profile, output_dir, api_key, auto_install
-        )
-    except FileNotFoundError:
-        print_engine_not_found(platform)
-        logger.info(
-            "Re-run with --install-default-engine=replicate "
-            "to auto-install the default Engine."
-        )
-        return 1
+    # ── engine with proper profile ───────────────────────────────────────────
+
+    engine = load_engine(
+        make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
+    )
 
     # ── processing phase ─────────────────────────────────────────────────────
 
