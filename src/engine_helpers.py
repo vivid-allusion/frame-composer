@@ -100,6 +100,12 @@ def build_inputs(bullets: list[Bullet], platform: str) -> list[Any]:
     ]
 
 
+def _emit_progress(msg: str) -> None:
+    """Write progress messages directly to stderr for real-time console output."""
+    sys.stderr.write(f"{msg}\n")
+    sys.stderr.flush()
+
+
 def make_engine_ctx(
     platform: str,
     search_paths: list[Path],
@@ -113,7 +119,7 @@ def make_engine_ctx(
         profile=profile,
         output_dir=output_dir,
         api_key=api_key,
-        on_progress=lambda msg: logger.info(msg),
+        on_progress=lambda msg: _emit_progress(msg),
     )
 
 
