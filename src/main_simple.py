@@ -243,6 +243,19 @@ def _run_standalone(args) -> int:
         )
         return 1
 
+    if not profile.get("endpoint"):
+        profile = load_profile_standalone()
+        profile = _apply_cli_overrides(profile, args)
+        platform = profile.get("platform") or platform
+
+    if not profile.get("endpoint"):
+        logger.error(
+            "Profile is missing required fields (endpoint, parameters). "
+            "Place a complete YAML profile in USER-FILES/03.PROFILES/ or "
+            "run with --profile to specify one."
+        )
+        return 1
+
     if not bullets:
         logger.warning(
             f"No .md files to process. Add bullet files to {input_path} and re-run."

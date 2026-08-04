@@ -7,6 +7,7 @@ then re-vendor.
 
 import importlib
 import importlib.util
+import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -134,3 +135,54 @@ def copy_standby_profiles(platform: str, vehicle_root: Path | None = None) -> in
         count += 1
 
     return count
+
+
+def seed_default_profile(platform: str, vehicle_root: Path | None = None) -> int:
+    """Generate a minimal profile from engine endpoints and save to 02.STANDBY/.
+
+    Used as a fallback when the engine package has no profiles/standby/ directory.
+    Reads the first IMG-Models endpoint TOML to derive a working profile.
+
+    Returns:
+        1 if a profile was created, 0 otherwise.
+    """
+    if vehicle_root is None:
+        vehicle_root = Path(__file__).resolve().parent.parent
+
+    try:
+        pkg = importlib.import_module(f"engine_{platform}")
+    except ImportError:
+        return 0
+
+    pkg_dir = Path(pkg.__file__).parent
+    endpoints_dir = pkg_dir / "endpoints" / "IMG-Models"
+    if not endpoints_dir.is_dir():
+        return 0
+
+    toml_files = sorted(endpoints_dir.glob("*.toml"))
+    if not toml_files:
+        return 0
+
+    content = toml_files[0].read_text()
+    match = re.search(r'endpoint\s*=\s*"([^"]+)"', content)
+    if not match:
+        return 0
+    endpoint = match.group(1)
+
+    cost_match = re.search(r'base_cost\s*=\s*([0-9.]+)', content)
+    base_cost = float(cost_match.group(1)) if cost_match else 0.001
+
+    profile_yaml = (
+        f"# Auto-generated profile for {platform} — customise before use\n"
+        f"platform: {platform}\n"
+        f"endpoint: {endpoint}\n"
+        f"parameters: {{}}\n"
+        f"pricing:\n"
+        f"  base_cost: {base_cost}\n"
+    )
+
+    dest = vehicle_root / "USER-FILES" / "02.STANDBY"
+    dest.mkdir(parents=True, exist_ok=True)
+    profile_path = dest / f"default_{platform}.yaml"
+    profile_path.write_text(profile_yaml)
+    return 1

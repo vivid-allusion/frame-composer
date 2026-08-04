@@ -101,9 +101,11 @@ def _prompt_platform() -> str:
 def _prompt_and_save_key(platform: str) -> str:
     """Prompt for API key, persist to .env, return the key."""
     key_name = _key_name(platform)
+    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+
     msg = (
         f"\nNo API key found for '{platform}' ({key_name}).\n"
-        f"Key will be saved to .env - do not commit this file.\n"
+        f"Key will be saved to {env_path} — do not commit this file.\n"
         f"Paste {key_name}: "
     )
     api_key = input(msg).strip()
@@ -111,12 +113,11 @@ def _prompt_and_save_key(platform: str) -> str:
         logger.error("No API key provided.")
         sys.exit(1)
 
-    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     env_path.parent.mkdir(parents=True, exist_ok=True)
     with open(env_path, "a") as f:
         f.write(f"\n{key_name}={api_key}\n")
     os.environ[key_name] = api_key
-    logger.success(f"Saved {key_name} to .env")
+    logger.success(f"Saved {key_name} to {env_path}")
     return api_key
 
 
