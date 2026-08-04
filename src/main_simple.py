@@ -30,7 +30,12 @@ from .exceptions import (
     ValidationError,
 )
 from .processing.markdown_parser import extract_all_image_urls, extract_prompt_text
-from .processing.profiles import load_profile_standalone, load_profile_studiolot
+from .processing.profiles import (
+    activate_profile,
+    list_standby,
+    load_profile_standalone,
+    load_profile_studiolot,
+)
 from .types import Bullet
 from .utils.logging import add_file_logging, setup_logging
 from .utils.path_resolver import (
@@ -194,9 +199,34 @@ def _run_studiolot(args) -> int:
 
 
 def _run_standalone(args) -> int:
-    profile = load_profile_standalone()
-    platform = profile.get("platform") or DEFAULT_PLATFORM
     search_paths = [Path(__file__).resolve().parent.parent / "ENGINES"]
+
+    # ── active profile ────────────────────────────────────────────────────────
+
+    try:
+        profile = load_profile_standalone()
+        platform = profile.get("platform") or DEFAULT_PLATFORM
+    except ConfigurationError:
+        standby = list_standby()
+        if not standby or not sys.stdin.isatty():
+            raise
+        print("\nNo active profile in USER-FILES/03.PROFILES/.")
+        print("Available profiles on the STANDBY shelf:")
+        for i, p in enumerate(standby, 1):
+            print(f"  {i}. {p.stem}")
+        while True:
+            try:
+                choice = input(f"Activate profile [1-{len(standby)}]: ").strip()
+                idx = int(choice) - 1
+                if 0 <= idx < len(standby):
+                    break
+            except (ValueError, IndexError):
+                pass
+            print(f"Invalid choice. Enter 1-{len(standby)}.")
+        activated = activate_profile(standby[idx])
+        logger.success(f"Activated {activated.name} in 03.PROFILES/")
+        profile = load_profile_standalone()
+        platform = profile.get("platform") or DEFAULT_PLATFORM
 
     auto_install = args.install_default_engine or os.environ.get(
         "STUDIOLOT_AUTO_INSTALL_ENGINE"
@@ -245,23 +275,6 @@ def _run_standalone(args) -> int:
         logger.info(
             "Re-run with --install-default-engine=replicate "
             "to auto-install the default Engine."
-        )
-        return 1
-
-    if not profile.get("endpoint"):
-        profile = load_profile_standalone()
-        profile = _apply_cli_overrides(profile, args)
-        platform = profile.get("platform") or platform
-        if profile.get("endpoint"):
-            engine = load_engine(
-                make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
-            )
-
-    if not profile.get("endpoint"):
-        logger.error(
-            "Profile is missing required fields (endpoint, parameters). "
-            "Place a complete YAML profile in USER-FILES/03.PROFILES/ or "
-            "run with --profile to specify one."
         )
         return 1
 
