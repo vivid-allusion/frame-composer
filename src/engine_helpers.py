@@ -9,12 +9,7 @@ from typing import Any
 from loguru import logger
 
 from src.engine_contract import validate_input_file
-from src.engine_loader import (
-    EngineLoadContext,
-    copy_standby_profiles,
-    load_engine,
-    seed_default_profile,
-)
+from src.engine_loader import EngineLoadContext, copy_standby_profiles, load_engine
 from src.types import Bullet
 
 
@@ -146,8 +141,4 @@ def load_engine_or_install(
     copied = copy_standby_profiles(platform)
     if copied:
         logger.info(f"Seeded {copied} standby profile(s) from engine-{platform}")
-    else:
-        seeded = seed_default_profile(platform)
-        if seeded:
-            logger.info(f"Generated default profile for {platform} from engine endpoints")
     return engine

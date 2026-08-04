@@ -7,7 +7,6 @@ then re-vendor.
 
 import importlib
 import importlib.util
-import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -122,106 +121,23 @@ def copy_standby_profiles(platform: str, vehicle_root: Path | None = None) -> in
     except ImportError:
         return 0
 
-    source = Path(pkg.__file__).parent / "profiles" / "standby"
-    if not source.is_dir():
+    profile_files: list[Path] = []
+    if hasattr(pkg, "list_standby_profiles"):
+        profile_files = pkg.list_standby_profiles()
+    else:
+        source = Path(pkg.__file__).parent / "profiles" / "standby"
+        if source.is_dir():
+            profile_files = sorted(source.glob("*.yaml"))
+
+    if not profile_files:
         return 0
 
     dest = vehicle_root / "USER-FILES" / "02.STANDBY"
     dest.mkdir(parents=True, exist_ok=True)
 
     count = 0
-    for yaml_file in sorted(source.glob("*.yaml")):
+    for yaml_file in profile_files:
         shutil.copy2(str(yaml_file), str(dest / yaml_file.name))
         count += 1
 
     return count
-
-
-def seed_default_profile(platform: str, vehicle_root: Path | None = None) -> int:
-    """Generate a minimal profile from engine endpoints and save to 02.STANDBY/.
-
-    Used as a fallback when the engine package has no profiles/standby/ directory.
-    Reads the first IMG-Models endpoint TOML to derive a working profile.
-
-    Returns:
-        1 if a profile was created, 0 otherwise.
-    """
-    if vehicle_root is None:
-        vehicle_root = Path(__file__).resolve().parent.parent
-
-    try:
-        pkg = importlib.import_module(f"engine_{platform}")
-    except ImportError:
-        return 0
-
-    pkg_dir = Path(pkg.__file__).parent
-    endpoints_dir = pkg_dir / "endpoints" / "IMG-Models"
-    if not endpoints_dir.is_dir():
-        return 0
-
-    toml_files = sorted(endpoints_dir.glob("*.toml"))
-    if not toml_files:
-        return 0
-
-    content = toml_files[0].read_text()
-    match = re.search(r'endpoint\s*=\s*"([^"]+)"', content)
-    if not match:
-        return 0
-    endpoint = match.group(1)
-
-    cost_match = re.search(r'base_cost\s*=\s*([0-9.]+)', content)
-    base_cost = float(cost_match.group(1)) if cost_match else 0.001
-
-    params: dict[str, object] = {}
-    for pm in re.finditer(
-        r"\[params\.(\w+)\]\n((?:(?!\[params\.).*\n?)*)", content
-    ):
-        name = pm.group(1)
-        block = pm.group(2)
-        if re.search(r"\n\s*optional\s*=\s*true", "\n" + block):
-            continue
-        if re.search(r"\n\s*hidden\s*=\s*true", "\n" + block):
-            continue
-        dm = re.search(r"default\s*=\s*(.+)", block)
-        if not dm or name in params:
-            continue
-        raw = dm.group(1).strip()
-        if raw.startswith('"'):
-            params[name] = raw.strip('"')
-        elif raw == "true":
-            params[name] = True
-        elif raw == "false":
-            params[name] = False
-        else:
-            try:
-                params[name] = int(raw)
-            except ValueError:
-                try:
-                    params[name] = float(raw)
-                except ValueError:
-                    params[name] = raw
-
-    if params:
-        param_lines = "\n".join(
-            f"  {k}: {v!r}" if isinstance(v, str) else f"  {k}: {v}"
-            for k, v in params.items()
-        )
-        param_block = f"parameters:\n{param_lines}"
-    else:
-        param_block = f"parameters: {{}}"
-
-    profile_yaml = (
-        f"# Auto-generated profile for {platform} — customise before use\n"
-        f"platform: {platform}\n"
-        f"endpoint: {endpoint}\n"
-        f"media_type: image\n"
-        f"{param_block}\n"
-        f"pricing:\n"
-        f"  base_cost: {base_cost}\n"
-    )
-
-    dest = vehicle_root / "USER-FILES" / "02.STANDBY"
-    dest.mkdir(parents=True, exist_ok=True)
-    profile_path = dest / f"default_{platform}.yaml"
-    profile_path.write_text(profile_yaml)
-    return 1
