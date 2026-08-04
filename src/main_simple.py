@@ -252,6 +252,10 @@ def _run_standalone(args) -> int:
         profile = load_profile_standalone()
         profile = _apply_cli_overrides(profile, args)
         platform = profile.get("platform") or platform
+        if profile.get("endpoint"):
+            engine = load_engine(
+                make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
+            )
 
     if not profile.get("endpoint"):
         logger.error(
