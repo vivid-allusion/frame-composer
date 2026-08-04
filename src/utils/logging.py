@@ -1,7 +1,20 @@
 """Logging setup with loguru."""
-from pathlib import Path
-from loguru import logger
+
 import sys
+from pathlib import Path
+
+from loguru import logger
+
+CONSOLE_FORMAT = (
+    "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+    "<cyan>{name}</cyan>:<cyan>{function}</cyan> - "
+    "<level>{message}</level>"
+)
+
+FILE_FORMAT = (
+    "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
+    "{name}:{function}:{line} - {message}"
+)
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -11,9 +24,7 @@ def setup_logging(debug: bool = False) -> None:
     level = "DEBUG" if debug else "WARNING"
     logger.add(
         sys.stderr,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
-               "<cyan>{name}</cyan>:<cyan>{function}</cyan> - "
-               "<level>{message}</level>",
+        format=CONSOLE_FORMAT,
         level=level,
         colorize=True,
     )
@@ -26,8 +37,7 @@ def setup_logging(debug: bool = False) -> None:
         rotation="10 MB",
         retention="7 days",
         level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
-               "{name}:{function}:{line} - {message}",
+        format=FILE_FORMAT,
     )
 
     logger.info(f"Logging configured (debug={debug})")

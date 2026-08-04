@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -15,7 +15,7 @@ OUTPUT_DIR_SUFFIX = "_GENAI"
 
 def resolve_input_path(
     profile: dict[str, Any],
-) -> tuple[Path, Optional[str]]:
+) -> tuple[Path, str | None]:
     custom_input_path = profile.get("paths", {}).get("input")
     project_name = profile.get("project", "") if custom_input_path else None
 

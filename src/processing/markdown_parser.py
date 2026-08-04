@@ -15,73 +15,55 @@ PRD Reference: Section 05.1, 06.2
 import re
 
 
-def extract_all_image_urls(markdown_content: str) -> list[str]:
-    """
-    Extract all image URLs from markdown content, preserving order.
-
-    Supports both markdown syntax ![alt](URL) and raw URLs.
-    Scans all lines and returns URLs in the order they appear.
+def parse_bullet(markdown_content: str) -> tuple[str, list[str]]:
+    """Parse a bullet .md file, returning (prompt, image_urls) in one pass.
 
     Args:
         markdown_content: Full markdown file content
 
     Returns:
-        List of extracted image URLs in order of appearance
+        Tuple of (prompt_text, list_of_image_urls)
 
     Raises:
-        ValueError: If no image URL found
-
-    Example:
-        >>> content = "Prompt here\\n![img1](https://example.com/1.jpg)\\n![img2](https://example.com/2.jpg)"
-        >>> extract_all_image_urls(content)
-        ['https://example.com/1.jpg', 'https://example.com/2.jpg']
+        ValueError: If no prompt found or no image URLs found
     """
-    urls: list[str] = []
     lines = markdown_content.split("\n")
+    prompt = ""
+    urls: list[str] = []
+    url_pattern = re.compile(r"!\[.*?\]\((https?://[^\)]+)\)")
 
-    pattern = r"!\[.*?\]\((https?://[^\)]+)\)"
-
+    seen_prompt = False
     for line in lines:
-        match = re.search(pattern, line)
-        if match:
-            urls.append(match.group(1))
+        stripped = line.strip()
+        if not stripped:
             continue
 
-        stripped = line.strip()
-        if stripped.startswith("http://") or stripped.startswith("https://"):
+        if not seen_prompt:
+            prompt = stripped
+            seen_prompt = True
+            continue
+
+        match = url_pattern.search(line)
+        if match:
+            urls.append(match.group(1))
+        elif stripped.startswith("http://") or stripped.startswith("https://"):
             urls.append(stripped)
 
+    if not prompt:
+        raise ValueError("No prompt text found in markdown")
     if not urls:
         raise ValueError("No image URLs found in markdown")
 
-    return urls
+    return prompt, urls
 
 
 def extract_prompt_text(markdown_content: str) -> str:
-    """
-    Extract text prompt from first line of markdown.
+    """Extract text prompt from first line of markdown."""
+    prompt, _ = parse_bullet(markdown_content)
+    return prompt
 
-    Takes only the first non-empty line as the prompt text.
-    Subsequent lines contain image URLs.
 
-    Args:
-        markdown_content: Full markdown file content
-
-    Returns:
-        Extracted prompt text (stripped of whitespace)
-
-    Raises:
-        ValueError: If no prompt found or content is empty
-
-    Example:
-        >>> content = "A man carries bags.\\n![image](https://example.com/img.jpg)"
-        >>> extract_prompt_text(content)
-        'A man carries bags.'
-    """
-    lines = markdown_content.split("\n")
-
-    for line in lines:
-        if line.strip():
-            return line.strip()
-
-    raise ValueError("No prompt text found in markdown")
+def extract_all_image_urls(markdown_content: str) -> list[str]:
+    """Extract all image URLs from markdown content, preserving order."""
+    _, urls = parse_bullet(markdown_content)
+    return urls

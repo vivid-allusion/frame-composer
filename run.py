@@ -17,61 +17,56 @@ import shutil
 from pathlib import Path
 
 
-def find_python_executable():
+def find_python_executable() -> str:
     """Find best Python executable (prefer 3.12 for compatibility)."""
-    # Try to find Python 3.12 specifically (best compatibility with replicate)
     for cmd in ["python3.12", "python3.11", "python3.10", "python3", sys.executable]:
         python_path = shutil.which(cmd)
         if python_path:
             return python_path
+    return sys.executable
 
-    return sys.executable  # Fallback to current Python
 
-
-def get_python_executable(venv_path):
+def get_python_executable(venv_path: Path) -> Path | None:
     """Get the Python executable path for the venv."""
     if sys.platform == "win32":
         python_exe = venv_path / "Scripts" / "python.exe"
     else:
         python_exe = venv_path / "bin" / "python"
-
     return python_exe if python_exe.exists() else None
 
 
-def is_venv_valid(venv_path):
+def is_venv_valid(venv_path: Path) -> bool:
     """Check if a venv has a working python executable."""
     return get_python_executable(venv_path) is not None
 
 
-def _handle_subprocess_error(e: subprocess.CalledProcessError):
+def _handle_subprocess_error(e: subprocess.CalledProcessError) -> None:
     print(f"[ERROR] Command failed: {e}")
     print(f"Error output: {e.stderr.decode()}")
     sys.exit(1)
 
 
-def find_or_create_venv():
-    """Find existing valid venv or create/repair one."""
-    script_dir = Path(__file__).parent
+def _find_valid_venv(script_dir: Path) -> Path | None:
+    """Return a valid venv path or None if none found."""
+    for name in ("venv", "venv_new"):
+        candidate = script_dir / name
+        if candidate.exists() and is_venv_valid(candidate):
+            return candidate
+    return None
 
+
+def _create_or_repair_venv(script_dir: Path) -> Path:
+    """Remove broken venvs, create a fresh one, return its path."""
     venv = script_dir / "venv"
-    venv_new = script_dir / "venv_new"
 
-    # Check existing venvs for validity
-    if venv.exists() and is_venv_valid(venv):
-        return venv
-
-    if venv_new.exists() and is_venv_valid(venv_new):
-        return venv_new
-
-    # Venv exists but is broken - repair it
-    broken_venv = venv if venv.exists() else (venv_new if venv_new.exists() else None)
+    broken_venv = script_dir / "venv" if venv.exists() else None
+    if not broken_venv:
+        broken_venv = script_dir / "venv_new" if (script_dir / "venv_new").exists() else None
     if broken_venv:
         print(f"[REPAIR] Broken virtual environment detected at {broken_venv} - repairing...")
         shutil.rmtree(broken_venv)
 
-    # Create fresh venv
     print("[INSTALL] Creating virtual environment...")
-
     python_exec = find_python_executable()
     print(f"Using Python: {python_exec}")
     print(f"Creating venv at: {venv}")
@@ -86,7 +81,34 @@ def find_or_create_venv():
         _handle_subprocess_error(e)
 
 
-def install_dependencies(python_exe, requirements_file):
+def find_or_create_venv() -> Path:
+    """Find existing valid venv or create/repair one."""
+    script_dir = Path(__file__).parent
+    existing = _find_valid_venv(script_dir)
+    if existing:
+        return existing
+    return _create_or_repair_venv(script_dir)
+
+
+def _upgrade_pip(python_exe: Path) -> None:
+    """Upgrade pip in the virtual environment."""
+    subprocess.run(
+        [str(python_exe), "-m", "pip", "install", "--upgrade", "pip"],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _install_requirements(python_exe: Path, requirements_file: Path) -> None:
+    """Install packages from requirements.txt."""
+    subprocess.run(
+        [str(python_exe), "-m", "pip", "install", "-q", "-r", str(requirements_file)],
+        check=True,
+        capture_output=True,
+    )
+
+
+def install_dependencies(python_exe: Path, requirements_file: Path) -> None:
     """Install or update dependencies from requirements.txt."""
     if not requirements_file.exists():
         print(
@@ -95,54 +117,29 @@ def install_dependencies(python_exe, requirements_file):
         return
 
     print("[INSTALL] Installing/updating dependencies from requirements.txt...")
-
     try:
-        # Upgrade pip quietly
-        subprocess.run(
-            [str(python_exe), "-m", "pip", "install", "--upgrade", "pip"],
-            check=True,
-            capture_output=True,
-        )
-
-        # Install requirements quietly
-        subprocess.run(
-            [
-                str(python_exe),
-                "-m",
-                "pip",
-                "install",
-                "-q",
-                "-r",
-                str(requirements_file),
-            ],
-            check=True,
-            capture_output=True,
-        )
-
+        _upgrade_pip(python_exe)
+        _install_requirements(python_exe, requirements_file)
         print("[OK] Dependencies installed successfully")
     except subprocess.CalledProcessError as e:
         _handle_subprocess_error(e)
 
 
-def main():
+def main() -> None:
     """Execute the main program with complete environment setup."""
     script_dir = Path(__file__).parent
     requirements_file = script_dir / "requirements.txt"
 
-    # Step 1: Find or create/repair virtual environment
     venv_path = find_or_create_venv()
 
-    # Step 2: Get Python executable (guaranteed valid after find_or_create_venv)
     python_exe = get_python_executable(venv_path)
     if python_exe is None:
         print(f"[ERROR] Virtual environment is invalid at {venv_path}")
         sys.exit(1)
 
-    # Step 3: Install/update dependencies
     install_dependencies(python_exe, requirements_file)
 
-    # Step 4: Run the main module
-    print()  # Blank line before script output
+    print()
     cmd = [str(python_exe), "-m", "src.main_simple"] + sys.argv[1:]
 
     try:

@@ -13,6 +13,7 @@ from typing import Optional
 
 from loguru import logger
 
+from ..constants import DEFAULT_PLATFORM
 from ..exceptions import AuthenticationError
 
 _PLATFORM_KEY_MAP: dict[str, str] = {
@@ -21,6 +22,8 @@ _PLATFORM_KEY_MAP: dict[str, str] = {
     "openrouter": "OPENROUTER_API_KEY",
     "google": "GOOGLE_API_KEY",
 }
+
+PASS_STORE_PREFIX: str = "studiolot/"
 
 SUPPORTED_PLATFORMS: list[str] = list(_PLATFORM_KEY_MAP.keys())
 
@@ -32,7 +35,7 @@ def _key_name(platform: str) -> str:
 def _try_pass(key_name: str) -> Optional[str]:
     try:
         result = subprocess.run(
-            ["pass", "show", f"studiolot/{key_name}"],
+            ["pass", "show", f"{PASS_STORE_PREFIX}{key_name}"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -45,7 +48,7 @@ def _try_pass(key_name: str) -> Optional[str]:
     return None
 
 
-def get_api_key(platform: str = "replicate") -> str:
+def get_api_key(platform: str = DEFAULT_PLATFORM) -> str:
     required_key = _key_name(platform)
 
     api_token = os.getenv(required_key)
@@ -67,7 +70,7 @@ def get_api_key(platform: str = "replicate") -> str:
     raise AuthenticationError(
         f"{required_key} not set.\n"
         f"  - Set as env var  (export {required_key}=...)\n"
-        f"  - Store in pass   (pass insert studiolot/{required_key.lower()})\n"
+        f"  - Store in pass   (pass insert {PASS_STORE_PREFIX}{required_key.lower()})\n"
         f"  - Add to .env     (echo {required_key}=... > .env)"
     )
 

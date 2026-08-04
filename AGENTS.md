@@ -100,16 +100,20 @@ main() → _run_studiolot() / _run_standalone()
 | File | Purpose |
 |------|---------|
 | `run.py` | Bootstrap: venv management, dependency install, launches `src/main_simple.py` |
-| `src/main_simple.py` | Entry point, CLI routing, both run modes |
-| `src/cli.py` | argparse definition |
-| `src/engine_loader.py` | Engine discovery and dynamic import |
-| `src/processing/markdown_parser.py` | Extract prompts and image URLs from .md files |
-| `src/auth/__init__.py` | 4-tier API key resolution (env → pass → .env → error) |
+| `src/main_simple.py` | Entry point, CLI routing, both run modes, bullet parsing |
+| `src/cli.py` | argparse definition (declarative `_ARGUMENTS` list) |
+| `src/engine_loader.py` | Canonical `load_engine()` + `EngineLoadContext` dataclass |
+| `src/engine_helpers.py` | Engine discovery, installation, input construction, loading |
+| `src/engine_contract.py` | `EngineInputFile` protocol — shared contract for Engine.InputFile |
+| `src/processing/markdown_parser.py` | Combined `parse_bullet()` + legacy `extract_prompt_text`/`extract_all_image_urls` |
+| `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()` |
+| `src/auth/__init__.py` | 4-tier API key resolution with `PASS_STORE_PREFIX` |
 | `src/auth/env.py` | .env file loading |
-| `src/exceptions.py` | Custom exception hierarchy |
-| `src/constants.py` | Shared constants (TIMESTAMP_FORMAT) |
+| `src/exceptions.py` | Custom exception hierarchy including `PreflightExit` |
+| `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
+| `src/types.py` | `Bullet` TypedDict — core data structure |
 | `src/utils/path_resolver.py` | Input/output path resolution with USER-FILES defaults |
-| `src/utils/logging.py` | loguru configuration |
+| `src/utils/logging.py` | loguru configuration with `CONSOLE_FORMAT`/`FILE_FORMAT` constants |
 
 ---
 
@@ -121,6 +125,13 @@ main() → _run_studiolot() / _run_standalone()
 - .env file: loaded from project root on startup
 
 ## Session History
+
+### 2026-08-04 — Session 3: Full Refactor Sweep (22/22 tasks)
+- Applied all items from `USER-FILES/07.TEMP/260804_134720_refactor_report.md`
+- **High (2):** `EngineLoadContext` dataclass (6 params → 1), SRP split — `main_simple.py` 365→232 lines with `profiles.py` + `engine_helpers.py` + `types.py` extraction
+- **Medium (8):** `DEFAULT_PLATFORM` constant, declarative CLI `_ARGUMENTS` list, shared `_execute_pipeline()`, `PreflightExit` exception, `run.py` bootstrap split (`_find_valid_venv`/`_create_or_repair_venv`/`_upgrade_pip`/`_install_requirements`), `_parse_profile_yaml()` DRY, `EngineInputFile` protocol + `validate_input_file()`
+- **Low (12):** `--no-progress` dead flag removed, `__version__` constant, `Bullet` TypedDict, `PASS_STORE_PREFIX`, import ordering in logging.py, `CONSOLE_FORMAT`/`FILE_FORMAT` constants, `parse_bullet()` combined parser, `Optional[str]→str|None`, `from __future__` removed (3.10+ min), `pyproject.toml`, `conftest.py`
+- 6 new files, 11 modified, 18/20 tests pass (2 pre-existing failures), all 21 .py files pass `ast.parse()`
 
 ### 2026-08-04 — Session 2: Refactor Report Execution (16/16 tasks)
 - Applied all items from `USER-FILES/07.TEMP/260804_000000_refactor_report.md`
@@ -146,10 +157,34 @@ main() → _run_studiolot() / _run_standalone()
 ## Known Issues & Technical Debt
 
 ### Remaining (2026-08-04)
-- `load_engine()` has 6 parameters — future EngineLoadContext dataclass candidate
-- No conftest.py / pytest configuration — tests use manual path manipulation
-- `_build_inputs()` uses `InputFile` from engine — tight coupling (now with error handling, but still implicit contract — consider a protocol/ABC)
-- `_run_studiolot()` (28 lines) and `_run_standalone()` (38 lines) slightly exceed 25-line guideline — function extraction already applied; remaining tight coupling is inherent to orchestration flow
+- `_build_inputs()` still dynamically imports `engine_{platform}` — `EngineInputFile` protocol validates the constructor signature at import time, but the per-platform dynamic import remains inherently fragile at module-load time (no way to statically verify all engines)
+- `_resolve_engine_for_studiolot()` uses `load_engine()` directly while standalone mode uses `load_engine_or_install()` — slight asymmetry; both could use engine_helpers
+- 2 pre-existing test failures: `test_missing_key_raises` (real `.env` bypasses env mock) and `test_custom_path_from_profile` (needs `/tmp/test_input` to exist on disk)
+- `PreflightExit` is now caught in `main()` but studiolot mode calls `_handle_preflight_checks()` without a dedicated try/except — relies on the outer `main()` handler; works but is implicit
+
+### Resolved (Session 3)
+- `load_engine()` 6-param → `EngineLoadContext` dataclass (1 param)
+- `main_simple.py` SRP split: 365→232 lines, extracted to `profiles.py`, `engine_helpers.py`, `types.py`
+- `DEFAULT_PLATFORM` constant — single source of truth for `"replicate"` default
+- `"replicate"` hardcoded at 4 sites → all reference `DEFAULT_PLATFORM`
+- Declarative CLI `_ARGUMENTS` list — new flags are 1 dict literal
+- Shared `_execute_pipeline()` — eliminates 12-line duplicate in both run modes
+- `_handle_preflight_checks()` sentinel `int|None` → `PreflightExit` exception
+- `_call_load_engine()` thin wrapper → replaced with `_make_engine_ctx()`
+- `_parse_profile_yaml()` extracted — single change-point for profile parsing
+- `EngineInputFile` protocol + `validate_input_file()` in `engine_contract.py`
+- `run.py` bootstrap split: `_find_valid_venv()`, `_create_or_repair_venv()`, `_upgrade_pip()`, `_install_requirements()`
+- `--no-progress` dead flag removed from CLI
+- `__version__` constant in `constants.py`, referenced by banner
+- `Bullet` TypedDict — typed contract for bullet data (path, prompt, reference_urls)
+- `PASS_STORE_PREFIX` constant in auth module
+- Import order fixed in `logging.py` (stdlib → third-party)
+- `CONSOLE_FORMAT` / `FILE_FORMAT` module-level constants
+- `parse_bullet()` — single-pass markdown parser (prompt + URLs in one split)
+- `Optional[str] → str|None` in `path_resolver.py`
+- `from __future__ import annotations` removed from all files (3.10+ min)
+- `pyproject.toml` — ruff, black, pytest, project metadata
+- `conftest.py` — pytest path configuration
 
 ### Resolved (Session 2)
 - run.py emoji → plain text: `[REPAIR]`, `[INSTALL]`, `[OK]`, `[ERROR]`, `[WARN]`
