@@ -101,9 +101,10 @@ def build_inputs(bullets: list[Bullet], platform: str) -> list[Any]:
 
 
 def _emit_progress(msg: str) -> None:
-    """Write progress messages directly to stderr for real-time console output."""
-    sys.stderr.write(f"{msg}\n")
-    sys.stderr.flush()
+    """Write progress messages to Rich-enabled console."""
+    from rich.console import Console
+
+    Console(stderr=True).print(f"[bold blue]{msg}[/bold blue]")
 
 
 def make_engine_ctx(
