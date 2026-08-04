@@ -172,11 +172,46 @@ def seed_default_profile(platform: str, vehicle_root: Path | None = None) -> int
     cost_match = re.search(r'base_cost\s*=\s*([0-9.]+)', content)
     base_cost = float(cost_match.group(1)) if cost_match else 0.001
 
+    params: dict[str, object] = {}
+    for pm in re.finditer(
+        r"\[params\.(\w+)\]\n((?:(?!\[params\.).*\n?)*)", content
+    ):
+        name = pm.group(1)
+        block = pm.group(2)
+        dm = re.search(r"default\s*=\s*(.+)", block)
+        if not dm or name in params:
+            continue
+        raw = dm.group(1).strip()
+        if raw.startswith('"'):
+            params[name] = raw.strip('"')
+        elif raw == "true":
+            params[name] = True
+        elif raw == "false":
+            params[name] = False
+        else:
+            try:
+                params[name] = int(raw)
+            except ValueError:
+                try:
+                    params[name] = float(raw)
+                except ValueError:
+                    params[name] = raw
+
+    if params:
+        param_lines = "\n".join(
+            f"  {k}: {v!r}" if isinstance(v, str) else f"  {k}: {v}"
+            for k, v in params.items()
+        )
+        param_block = f"parameters:\n{param_lines}"
+    else:
+        param_block = f"parameters: {{}}"
+
     profile_yaml = (
         f"# Auto-generated profile for {platform} — customise before use\n"
         f"platform: {platform}\n"
         f"endpoint: {endpoint}\n"
-        f"parameters: {{}}\n"
+        f"media_type: image\n"
+        f"{param_block}\n"
         f"pricing:\n"
         f"  base_cost: {base_cost}\n"
     )
