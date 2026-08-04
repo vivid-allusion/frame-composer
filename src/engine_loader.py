@@ -178,6 +178,10 @@ def seed_default_profile(platform: str, vehicle_root: Path | None = None) -> int
     ):
         name = pm.group(1)
         block = pm.group(2)
+        if re.search(r"\n\s*optional\s*=\s*true", "\n" + block):
+            continue
+        if re.search(r"\n\s*hidden\s*=\s*true", "\n" + block):
+            continue
         dm = re.search(r"default\s*=\s*(.+)", block)
         if not dm or name in params:
             continue
