@@ -122,14 +122,14 @@ def _execute_pipeline(
     md_files: list[MarkdownFile], engine: Any, platform: str
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report."""
-    from rich.console import Console
+    from rich.progress import Progress
 
-    console = Console()
     inputs = build_inputs(md_files, platform)
-    total = len(inputs)
 
-    with console.status(f"[cyan]Sending {total} markdown file(s) to AI model...[/cyan]") as status:
+    with Progress() as progress:
+        task = progress.add_task("[cyan]Sending to AI model...", total=len(inputs))
         results = engine.run(inputs)
+        progress.update(task, completed=len(inputs))
 
     return _report_results(results)
 
