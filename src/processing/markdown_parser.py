@@ -13,10 +13,9 @@ PRD Reference: Section 05.1, 06.2
 """
 
 import re
-from typing import List
 
 
-def extract_all_image_urls(markdown_content: str) -> List[str]:
+def extract_all_image_urls(markdown_content: str) -> list[str]:
     """
     Extract all image URLs from markdown content, preserving order.
 
@@ -37,7 +36,7 @@ def extract_all_image_urls(markdown_content: str) -> List[str]:
         >>> extract_all_image_urls(content)
         ['https://example.com/1.jpg', 'https://example.com/2.jpg']
     """
-    urls: List[str] = []
+    urls: list[str] = []
     lines = markdown_content.split("\n")
 
     pattern = r"!\[.*?\]\((https?://[^\)]+)\)"

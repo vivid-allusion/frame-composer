@@ -5,7 +5,7 @@ import argparse
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Replicate Image Generation Wrapper"
+        description="Vivid Allusion Frame Composer"
     )
 
     parser.add_argument(
@@ -70,7 +70,8 @@ def parse_args():
         "--install-default-engine",
         type=str,
         default=None,
-        help="Auto-install default Engine (e.g. 'replicate') on first run",
+        help="Auto-install default Engine on first run "
+             "(supported: replicate, fal, openrouter, google)",
     )
 
     parser.set_defaults(save_payloads=True)

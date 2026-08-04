@@ -21,8 +21,12 @@ from .cli import parse_args
 from .engine_loader import load_engine
 from .exceptions import AuthenticationError, ConfigurationError, ValidationError
 from .processing.markdown_parser import extract_all_image_urls, extract_prompt_text
-from .processing.discovery import InputDiscovery
 from .utils.logging import setup_logging
+from .utils.path_resolver import (
+    create_timestamped_output_path,
+    resolve_input_path,
+    resolve_output_base_path,
+)
 
 ENGINE_INSTALL_MESSAGE = (
     "To install an Engine:\n"
@@ -35,6 +39,10 @@ ENGINE_INSTALL_MESSAGE = (
 )
 
 SUPPORTED_PLATFORMS = ["replicate", "fal", "openrouter", "google"]
+MAX_WALK_DEPTH = 10
+
+
+# ── shared helpers ──────────────────────────────────────────────────────────
 
 
 def _read_bullets(input_dir: Path) -> list[dict[str, Any]]:
@@ -89,7 +97,7 @@ def _load_profile_studiolot(profile_path: Path) -> dict[str, Any]:
 def _find_project_engines_dir(start_dir: Path) -> Path | None:
     """Walk up from start_dir looking for 00_APPLICATIONS/ENGINES/."""
     current = start_dir.resolve()
-    for _ in range(10):
+    for _ in range(MAX_WALK_DEPTH):
         candidate = current / "00_APPLICATIONS" / "ENGINES"
         if candidate.is_dir():
             return candidate
@@ -123,7 +131,7 @@ def _auto_install_engine(platform: str) -> bool:
         return True
 
     repo_url = f"https://github.com/vivid-allusion/engine-{platform}.git"
-    logger.info(f"Cloning {repo_url} → {target}")
+    logger.info(f"Cloning {repo_url} -> {target}")
     result = subprocess.run(
         ["git", "clone", repo_url, str(target)],
         capture_output=True,
@@ -145,7 +153,7 @@ def _auto_install_engine(platform: str) -> bool:
     return True
 
 
-def _build_inputs(bullets, platform) -> list[Any]:
+def _build_inputs(bullets: list[dict[str, Any]], platform: str) -> list[Any]:
     """Construct InputFile objects using the Engine's datatype."""
     pkg = importlib.import_module(f"engine_{platform}")
     InputFile = pkg.InputFile
@@ -157,6 +165,66 @@ def _build_inputs(bullets, platform) -> list[Any]:
         )
         for b in bullets
     ]
+
+
+def _report_results(results: list[Any]) -> int:
+    """Summarise engine.run() results and return exit code."""
+    ok = sum(1 for r in results if r.status == "ok")
+    failed = sum(1 for r in results if r.status == "error")
+    logger.success(f"Complete: {ok} generated, {failed} errors")
+    for r in results:
+        if r.status == "error":
+            logger.error(f"  {r.bullet_path.name}: {r.error_msg}")
+    return 1 if failed else 0
+
+
+def _load_engine_or_install(
+    platform: str,
+    search_paths: list[Path],
+    profile: dict[str, Any],
+    output_dir: Path,
+    api_key: str | None,
+    auto_install: str | None = None,
+) -> Any:
+    """Load engine with optional auto-install fallback on FileNotFoundError."""
+    try:
+        return load_engine(
+            platform=platform,
+            search_paths=search_paths,
+            profile=profile,
+            output_dir=output_dir,
+            api_key=api_key,
+            on_progress=lambda msg: logger.info(msg),
+        )
+    except FileNotFoundError:
+        if not auto_install:
+            raise
+        logger.info(f"Auto-installing Engine: {auto_install}")
+        if not _auto_install_engine(auto_install):
+            raise FileNotFoundError(
+                f"Failed to auto-install engine '{auto_install}'"
+            )
+        return load_engine(
+            platform=platform,
+            search_paths=search_paths,
+            profile=profile,
+            output_dir=output_dir,
+            api_key=api_key,
+            on_progress=lambda msg: logger.info(msg),
+        )
+
+
+def _apply_cli_overrides(profile: dict[str, Any], args: Any) -> dict[str, Any]:
+    """Return a copy of profile with CLI flags merged into parameters."""
+    params = dict(profile.get("parameters", {}))
+    if args.force_png:
+        params["force_png"] = True
+    if not args.save_payloads:
+        params["save_payloads"] = False
+    return {**profile, "parameters": params}
+
+
+# ── entry point ─────────────────────────────────────────────────────────────
 
 
 def main():
@@ -187,6 +255,9 @@ def main():
         return 1
 
 
+# ── run modes ───────────────────────────────────────────────────────────────
+
+
 def _run_studiolot(args) -> int:
     if not args.output_dir:
         raise ConfigurationError("--output_dir is required in studiolot mode")
@@ -205,10 +276,10 @@ def _run_studiolot(args) -> int:
     bullets = _read_bullets(input_dir)
 
     if args.dry_run:
-        logger.info(f"DRY RUN — would process {len(bullets)} bullet(s)")
+        logger.info(f"DRY RUN -- would process {len(bullets)} bullet(s)")
         return 0
 
-    api_key = get_api_key()
+    api_key = get_api_key(platform)
 
     project_engines = _find_project_engines_dir(output_dir)
     if not project_engines:
@@ -228,16 +299,7 @@ def _run_studiolot(args) -> int:
 
     inputs = _build_inputs(bullets, platform)
     results = engine.run(inputs)
-
-    ok = sum(1 for r in results if r.status == "ok")
-    failed = sum(1 for r in results if r.status == "error")
-    logger.success(f"Complete: {ok} generated, {failed} errors")
-
-    for r in results:
-        if r.status == "error":
-            logger.error(f"  {r.bullet_path.name}: {r.error_msg}")
-
-    return 1 if failed else 0
+    return _report_results(results)
 
 
 def _run_standalone(args) -> int:
@@ -248,86 +310,44 @@ def _run_standalone(args) -> int:
         "STUDIOLOT_AUTO_INSTALL_ENGINE"
     )
 
-    from src.utils.path_resolver import (
-        resolve_input_path,
-        resolve_output_base_path,
-        create_timestamped_output_path,
-    )
-
-    input_path, _ = resolve_input_path(
-        {}, [profile], Path("USER-FILES/03.PROFILES")
-    )
-    output_base = resolve_output_base_path({}, [profile])
+    input_path, _ = resolve_input_path({}, profile)
+    output_base = resolve_output_base_path({}, profile)
     output_dir = create_timestamped_output_path(output_base)
 
     bullets = _read_bullets(input_path)
 
-    params = dict(profile.get("parameters", {}))
-    if args.force_png:
-        params["force_png"] = True
-    if not args.save_payloads:
-        params["save_payloads"] = False
-    profile["parameters"] = params
-
+    profile = _apply_cli_overrides(profile, args)
     search_paths = [_find_vehicle_engines_dir()]
 
-    api_key = None if args.dry_run else get_api_key()
+    api_key = None if args.dry_run else get_api_key(platform)
 
     if args.cost_estimation:
         total = len(bullets)
         cost = profile.get("pricing", {}).get("base_cost", 0.0)
         logger.info(
-            f"Estimated cost: {total} files × ${cost:.3f} = ${total * cost:.2f}"
+            f"Estimated cost: {total} files x ${cost:.3f} = ${total * cost:.2f}"
         )
         return 0
 
     if args.dry_run:
-        logger.info(f"DRY RUN — would process {len(bullets)} bullet(s)")
+        logger.info(f"DRY RUN -- would process {len(bullets)} bullet(s)")
         return 0
 
     try:
-        engine = load_engine(
-            platform=platform,
-            search_paths=search_paths,
-            profile=profile,
-            output_dir=output_dir,
-            api_key=api_key,
-            on_progress=lambda msg: logger.info(msg),
+        engine = _load_engine_or_install(
+            platform, search_paths, profile, output_dir, api_key, auto_install
         )
     except FileNotFoundError:
-        if auto_install:
-            logger.info(f"Auto-installing Engine: {auto_install}")
-            if _auto_install_engine(auto_install):
-                engine = load_engine(
-                    platform=platform,
-                    search_paths=search_paths,
-                    profile=profile,
-                    output_dir=output_dir,
-                    api_key=api_key,
-                    on_progress=lambda msg: logger.info(msg),
-                )
-            else:
-                return 1
-        else:
-            _print_engine_not_found(platform)
-            logger.info(
-                "Re-run with --install-default-engine=replicate "
-                "to auto-install the default Engine."
-            )
-            return 1
+        _print_engine_not_found(platform)
+        logger.info(
+            "Re-run with --install-default-engine=replicate "
+            "to auto-install the default Engine."
+        )
+        return 1
 
     inputs = _build_inputs(bullets, platform)
     results = engine.run(inputs)
-
-    ok = sum(1 for r in results if r.status == "ok")
-    failed = sum(1 for r in results if r.status == "error")
-    logger.success(f"Complete: {ok} generated, {failed} errors")
-
-    for r in results:
-        if r.status == "error":
-            logger.error(f"  {r.bullet_path.name}: {r.error_msg}")
-
-    return 1 if failed else 0
+    return _report_results(results)
 
 
 if __name__ == "__main__":

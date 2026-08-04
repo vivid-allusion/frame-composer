@@ -8,22 +8,32 @@ Priority:
 """
 
 import os
-import sys
 import subprocess
-from pathlib import Path
 from typing import Optional
+
 from loguru import logger
-from dotenv import load_dotenv
+
 from ..exceptions import AuthenticationError
 
-REQUIRED_KEY = "REPLICATE_API_TOKEN"
+_PLATFORM_KEY_MAP: dict[str, str] = {
+    "replicate": "REPLICATE_API_TOKEN",
+    "fal": "FAL_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "google": "GOOGLE_API_KEY",
+}
+
+
+def _key_name(platform: str) -> str:
+    return _PLATFORM_KEY_MAP.get(platform, f"{platform.upper()}_API_KEY")
 
 
 def _try_pass(key_name: str) -> Optional[str]:
     try:
         result = subprocess.run(
             ["pass", "show", f"studiolot/{key_name}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
             logger.info("Retrieved {} from pass", key_name)
@@ -33,27 +43,30 @@ def _try_pass(key_name: str) -> Optional[str]:
     return None
 
 
-def get_api_key() -> str:
-    api_token = os.getenv(REQUIRED_KEY)
+def get_api_key(platform: str = "replicate") -> str:
+    required_key = _key_name(platform)
+
+    api_token = os.getenv(required_key)
     if api_token:
-        logger.info("Using {} from environment", REQUIRED_KEY)
+        logger.info("Using {} from environment", required_key)
         return api_token
 
-    api_token = _try_pass(REQUIRED_KEY.lower())
+    api_token = _try_pass(required_key.lower())
     if api_token:
-        os.environ[REQUIRED_KEY] = api_token
+        os.environ[required_key] = api_token
         return api_token
 
-    from .env import get_replicate_api_token_from_env
-    api_token = get_replicate_api_token_from_env()
+    from .env import get_api_token_from_env
+
+    api_token = get_api_token_from_env(required_key)
     if api_token:
         return api_token
 
     raise AuthenticationError(
-        "REPLICATE_API_TOKEN not set.\n"
-        "  - Set as env var  (export REPLICATE_API_TOKEN=...)\n"
-        "  - Store in pass   (pass insert studiolot/replicate_api_token)\n"
-        "  - Add to .env     (echo REPLICATE_API_TOKEN=... > .env)"
+        f"{required_key} not set.\n"
+        f"  - Set as env var  (export {required_key}=...)\n"
+        f"  - Store in pass   (pass insert studiolot/{required_key.lower()})\n"
+        f"  - Add to .env     (echo {required_key}=... > .env)"
     )
 
 
