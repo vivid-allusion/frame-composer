@@ -32,7 +32,7 @@ from .exceptions import (
 from .processing.markdown_parser import extract_all_image_urls, extract_prompt_text
 from .processing.profiles import load_profile_standalone, load_profile_studiolot
 from .types import Bullet
-from .utils.logging import setup_logging
+from .utils.logging import add_file_logging, setup_logging
 from .utils.path_resolver import (
     create_timestamped_output_path,
     resolve_input_path,
@@ -172,6 +172,7 @@ def _run_studiolot(args) -> int:
         raise ConfigurationError("--output_dir is required in studiolot mode")
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    add_file_logging(output_dir)
 
     profile_path = Path(args.profile) if args.profile else None
     if not profile_path:
@@ -203,6 +204,7 @@ def _run_standalone(args) -> int:
 
     output_base = resolve_output_base_path(profile)
     output_dir = create_timestamped_output_path(output_base)
+    add_file_logging(output_dir)
 
     profile = _apply_cli_overrides(profile, args)
 

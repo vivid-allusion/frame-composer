@@ -18,7 +18,7 @@ FILE_FORMAT = (
 
 
 def setup_logging(debug: bool = False) -> None:
-    """Configure logging for the application."""
+    """Configure console logging for the application."""
     logger.remove()
 
     level = "DEBUG" if debug else "WARNING"
@@ -29,15 +29,16 @@ def setup_logging(debug: bool = False) -> None:
         colorize=True,
     )
 
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
+    logger.info(f"Logging configured (debug={debug})")
 
+
+def add_file_logging(output_dir: Path) -> None:
+    """Attach a file log sink to the output directory."""
+    output_dir.mkdir(parents=True, exist_ok=True)
     logger.add(
-        log_dir / "frame_composer_{time}.log",
+        output_dir / "frame_composer_{time}.log",
         rotation="10 MB",
         retention="7 days",
         level="DEBUG",
         format=FILE_FORMAT,
     )
-
-    logger.info(f"Logging configured (debug={debug})")

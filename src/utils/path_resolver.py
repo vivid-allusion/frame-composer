@@ -10,7 +10,7 @@ from src.constants import TIMESTAMP_FORMAT
 
 USER_FILES_INPUT = Path("USER-FILES/04.INPUT")
 USER_FILES_OUTPUT = Path("USER-FILES/05.OUTPUT")
-OUTPUT_DIR_SUFFIX = "_GENAI"
+OUTPUT_DIR_SUFFIX = "_IMG"
 
 
 def resolve_input_path(
