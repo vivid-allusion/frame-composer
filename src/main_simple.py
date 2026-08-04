@@ -31,7 +31,6 @@ from .exceptions import (
 )
 from .processing.markdown_parser import extract_all_image_urls, extract_prompt_text
 from .processing.profiles import (
-    list_standby,
     load_profile_standalone,
     load_profile_studiolot,
 )
@@ -243,13 +242,13 @@ def _run_standalone(args) -> int:
         profile = load_profile_standalone()
         platform = profile.get("platform") or platform
     except ConfigurationError:
-        shelf_names = ", ".join(p.stem for p in list_standby())
-        raise ConfigurationError(
-            "No active profile in USER-FILES/03.PROFILES/.\n"
-            "Copy a YAML from USER-FILES/02.STANDBY/ to "
-            "USER-FILES/03.PROFILES/ and re-run.\n"
-            + (f"Available in USER-FILES/02.STANDBY/: {shelf_names}" if shelf_names else f"No profiles in USER-FILES/02.STANDBY/ either — install an engine first.")
-        ) from None
+        print(
+            "\nThanks for supplying your API key. "
+            "To make the script operational, pick a profile YAML\n"
+            "from frame-composer/USER-FILES/02.STANDBY/ and copy it to\n"
+            "frame-composer/USER-FILES/03.PROFILES/, then re-run.\n"
+        )
+        return 0
 
     profile = _apply_cli_overrides(profile, args)
 
