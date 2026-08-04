@@ -99,12 +99,22 @@ def _handle_preflight_checks(
 
 def _report_results(results: list[Any]) -> int:
     """Summarise engine.run() results and return exit code."""
+    from rich.console import Console
+
+    console = Console()
     ok = sum(1 for r in results if r.status == "ok")
     failed = sum(1 for r in results if r.status == "error")
-    logger.success(f"Complete: {ok} generated, {failed} errors")
+
+    if failed:
+        console.print(f"\n[bold red]✗ {failed} failed[/bold red]  [green]✓ {ok} ok[/green]")
+    else:
+        console.print(f"\n[bold green]✓ All {ok} generated successfully[/bold green]")
+
     for r in results:
         if r.status == "error":
-            logger.error(f"  {r.bullet_path.name}: {r.error_msg}")
+            console.print(f"  [red]{r.bullet_path.name}[/red]: {r.error_msg}")
+        else:
+            console.print(f"  [dim]{r.bullet_path.name}[/dim] → [green]{r.path}[/green]")
     return 1 if failed else 0
 
 
@@ -112,8 +122,19 @@ def _execute_pipeline(
     bullets: list[Bullet], engine: Any, platform: str
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report."""
+    from rich.progress import Progress
+
     inputs = build_inputs(bullets, platform)
-    results = engine.run(inputs)
+
+    with Progress() as progress:
+        task = progress.add_task("[cyan]Sending to AI model...", total=len(inputs))
+        original_cb = engine._on_progress
+        engine._on_progress = lambda msg: progress.advance(task)
+        try:
+            results = engine.run(inputs)
+        finally:
+            engine._on_progress = original_cb
+
     return _report_results(results)
 
 
