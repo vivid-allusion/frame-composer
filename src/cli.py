@@ -5,7 +5,7 @@ import argparse
 _ARGUMENTS: list[dict] = [
     {
         "flags": ["--input_dir"],
-        "kwargs": {"type": str, "default": None, "help": "Source folder with bullet .md files"},
+        "kwargs": {"type": str, "default": None, "help": "Source folder with .md files"},
     },
     {
         "flags": ["--output_dir"],

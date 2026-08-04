@@ -15,8 +15,8 @@ PRD Reference: Section 05.1, 06.2
 import re
 
 
-def parse_bullet(markdown_content: str) -> tuple[str, list[str]]:
-    """Parse a bullet .md file, returning (prompt, image_urls) in one pass.
+def parse_markdown(markdown_content: str) -> tuple[str, list[str]]:
+    """Parse a .md file, returning (prompt, image_urls) in one pass.
 
     Args:
         markdown_content: Full markdown file content
@@ -57,11 +57,11 @@ def parse_bullet(markdown_content: str) -> tuple[str, list[str]]:
 
 def extract_prompt_text(markdown_content: str) -> str:
     """Extract text prompt from first line of markdown."""
-    prompt, _ = parse_bullet(markdown_content)
+    prompt, _ = parse_markdown(markdown_content)
     return prompt
 
 
 def extract_all_image_urls(markdown_content: str) -> list[str]:
     """Extract all image URLs from markdown content, preserving order."""
-    _, urls = parse_bullet(markdown_content)
+    _, urls = parse_markdown(markdown_content)
     return urls

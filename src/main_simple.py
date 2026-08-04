@@ -1,7 +1,7 @@
 """Vivid Allusion Frame Composer — migrated to Engine interface.
 
 Both studiolot and standalone modes share the same Engine-based execution.
-The Vehicle reads bullets, loads an Engine, and calls engine.run().
+The Vehicle reads markdowns, loads an Engine, and calls engine.run().
 """
 
 import os
@@ -34,7 +34,7 @@ from .processing.profiles import (
     load_profile_standalone,
     load_profile_studiolot,
 )
-from .types import Bullet
+from .types import MarkdownFile
 from .utils.logging import add_file_logging, setup_logging
 from .utils.path_resolver import (
     create_timestamped_output_path,
@@ -42,13 +42,13 @@ from .utils.path_resolver import (
     resolve_output_base_path,
 )
 
-# ── bullet parsing ────────────────────────────────────────────────────────────
+# ── markdown parsing ──────────────────────────────────────────────────────
 
 
-def _read_bullets(input_dir: Path) -> list[Bullet]:
-    """Read bullet .md files from input_dir, extract prompt + reference URLs."""
+def _read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
+    """Read .md files from input_dir, extract prompt + reference URLs."""
     md_files = sorted(input_dir.rglob("*.md"))
-    bullets: list[Bullet] = []
+    result: list[MarkdownFile] = []
     for md_path in md_files:
         content = md_path.read_text(encoding="utf-8")
         prompt = ""
@@ -61,12 +61,12 @@ def _read_bullets(input_dir: Path) -> list[Bullet]:
             urls = extract_all_image_urls(content)
         except ValueError as e:
             logger.warning(f"Failed to extract URLs from {md_path.name}: {e}")
-        bullets.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
-    if not bullets:
+        result.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
+    if not result:
         logger.warning(f"No .md files found in {input_dir}")
-        return bullets
-    logger.info(f"Discovered {len(bullets)} bullet(s) in {input_dir}")
-    return bullets
+        return result
+    logger.info(f"Discovered {len(result)} markdown file(s) in {input_dir}")
+    return result
 
 
 # ── CLI / orchestration helpers ────────────────────────────────────────────────
@@ -83,17 +83,17 @@ def _apply_cli_overrides(profile: dict[str, Any], args: Any) -> dict[str, Any]:
 
 
 def _handle_preflight_checks(
-    args: Any, bullets: list[Bullet], profile: dict[str, Any]
+    args: Any, md_files: list[MarkdownFile], profile: dict[str, Any]
 ) -> None:
     if args.cost_estimation:
-        total = len(bullets)
+        total = len(md_files)
         cost = profile.get("pricing", {}).get("base_cost", 0.0)
         logger.info(
             f"Estimated cost: {total} files x ${cost:.3f} = ${total * cost:.2f}"
         )
         raise PreflightExit(0)
     if args.dry_run:
-        logger.info(f"DRY RUN -- would process {len(bullets)} bullet(s)")
+        logger.info(f"DRY RUN -- would process {len(md_files)} markdown file(s)")
         raise PreflightExit(0)
 
 
@@ -112,19 +112,19 @@ def _report_results(results: list[Any]) -> int:
 
     for r in results:
         if r.status == "error":
-            console.print(f"  [red]{r.bullet_path.name}[/red]: {r.error_msg}")
+            console.print(f"  [red]{r.source_path.name}[/red]: {r.error_msg}")
         else:
-            console.print(f"  [dim]{r.bullet_path.name}[/dim] → [green]{r.path}[/green]")
+            console.print(f"  [dim]{r.source_path.name}[/dim] → [green]{r.path}[/green]")
     return 1 if failed else 0
 
 
 def _execute_pipeline(
-    bullets: list[Bullet], engine: Any, platform: str
+    md_files: list[MarkdownFile], engine: Any, platform: str
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report."""
     from rich.progress import Progress
 
-    inputs = build_inputs(bullets, platform)
+    inputs = build_inputs(md_files, platform)
 
     with Progress() as progress:
         task = progress.add_task("[cyan]Sending to AI model...", total=len(inputs))
@@ -208,13 +208,13 @@ def _run_studiolot(args) -> int:
 
     input_dir = Path(args.input_dir) if args.input_dir else Path(".")
 
-    bullets = _read_bullets(input_dir)
-    _handle_preflight_checks(args, bullets, profile)
+    md_files = _read_markdown_files(input_dir)
+    _handle_preflight_checks(args, md_files, profile)
 
     api_key = get_api_key(platform)
     engine = _resolve_engine_for_studiolot(output_dir, platform, profile, api_key)
 
-    return _execute_pipeline(bullets, engine, platform)
+    return _execute_pipeline(md_files, engine, platform)
 
 
 def _run_standalone(args) -> int:
@@ -294,16 +294,16 @@ def _run_standalone(args) -> int:
     # ── processing phase ─────────────────────────────────────────────────────
 
     input_path, _ = resolve_input_path(profile)
-    bullets = _read_bullets(input_path)
-    _handle_preflight_checks(args, bullets, profile)
+    md_files = _read_markdown_files(input_path)
+    _handle_preflight_checks(args, md_files, profile)
 
-    if not bullets:
+    if not md_files:
         logger.warning(
-            f"No .md files to process. Add bullet files to {input_path} and re-run."
+            f"No .md files to process. Add .md files to {input_path} and re-run."
         )
         return 0
 
-    return _execute_pipeline(bullets, engine, platform)
+    return _execute_pipeline(md_files, engine, platform)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ from loguru import logger
 
 from src.engine_contract import validate_input_file
 from src.engine_loader import EngineLoadContext, copy_standby_profiles, load_engine
-from src.types import Bullet
+from src.types import MarkdownFile
 
 
 def find_project_engines_dir(start_dir: Path, max_depth: int = 10) -> Path | None:
@@ -80,7 +80,7 @@ def auto_install_engine(platform: str) -> bool:
     return True
 
 
-def build_inputs(bullets: list[Bullet], platform: str) -> list[Any]:
+def build_inputs(md_files: list[MarkdownFile], platform: str) -> list[Any]:
     """Construct InputFile objects using the Engine's datatype."""
     try:
         pkg = importlib.import_module(f"engine_{platform}")
@@ -96,7 +96,7 @@ def build_inputs(bullets: list[Bullet], platform: str) -> list[Any]:
             prompt=b["prompt"],
             reference_urls=b["reference_urls"],
         )
-        for b in bullets
+        for b in md_files
     ]
 
 
