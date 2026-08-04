@@ -5,6 +5,7 @@ from typing import Any
 
 import yaml
 
+from src.constants import DEFAULT_PLATFORM
 from src.exceptions import ConfigurationError
 
 
@@ -23,11 +24,7 @@ def load_profile_standalone() -> dict[str, Any]:
         standby = Path("USER-FILES/02.STANDBY")
         yamls = sorted(standby.glob("*.yaml")) + sorted(standby.glob("*.yml"))
     if not yamls:
-        raise ConfigurationError(
-            "No profile found in USER-FILES/03.PROFILES/ or USER-FILES/02.STANDBY/.\n"
-            "Install an Engine first to seed standby profiles, or place a YAML profile "
-            "in USER-FILES/03.PROFILES/."
-        )
+        return {"platform": DEFAULT_PLATFORM}
     return _parse_profile_yaml(yamls[0])
 
 
