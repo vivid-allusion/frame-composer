@@ -71,22 +71,42 @@ The Frame Composer (Vehicle) delegates all API/provider logic to Engine plugins.
 
 ### Engine Loading
 - `src/engine_loader.py` — canonical `load_engine()` implementation
+- Uses `EngineLoadContext` dataclass (single param: `load_engine(ctx)`)
 - Searches `search_paths` for `engine-<platform>/` directories
 - Local clones take precedence over pip-installed packages (VEHICLE_CONTRACT §2b)
-- Engine instantiation: `engine = load_engine(platform, search_paths, profile, output_dir, api_key)`
+- Corrupted local engine falls back to pip-installed package (Stub 5 fix)
+- After engine load, `copy_standby_profiles()` seeds `USER-FILES/02.STANDBY/` from the engine package
 
 ### Supported Platforms
 `replicate`, `fal`, `openrouter`, `google` — new engines added by installing the corresponding package.
 
 ### Processing Flow
+
+Standalone mode (TTY):
 ```
-main() → _run_studiolot() / _run_standalone()
-  → _read_bullets()          # parse .md input files
-  → get_api_key(platform)    # 4-tier auth resolution
-  → load_engine()            # dynamic Engine discovery
-  → _build_inputs()          # Engine.InputFile construction
-  → engine.run(inputs)       # bulk generation
-  → _report_results()        # summary + exit code
+main() → _run_standalone()
+  → _read_bullets()              # parse .md input files
+  → _handle_preflight_checks     # cost/dry-run early exit
+  → [engine pre-check]           # Stub 7: fail early if no engine + no TTY
+  → get_api_key(platform)        # 4-tier auth → wizard fallback on failure
+  → get_api_key_interactive()    # Stub 1: platform selection + API key setup
+  → load_engine_or_install()     # dynamic Engine discovery + auto-install
+  → copy_standby_profiles()      # Stub 3: seed engine profiles to 02.STANDBY/
+  → build_inputs()               # Engine.InputFile construction
+  → engine.run(inputs)           # bulk generation
+  → _report_results()            # summary + exit code
+```
+
+Studiolot mode:
+```
+main() → _run_studiolot()
+  → _read_bullets()
+  → _handle_preflight_checks
+  → get_api_key(platform)
+  → load_engine()
+  → build_inputs()
+  → engine.run(inputs)
+  → _report_results()
 ```
 
 ### CLI Modes
@@ -99,15 +119,15 @@ main() → _run_studiolot() / _run_standalone()
 
 | File | Purpose |
 |------|---------|
-| `run.py` | Bootstrap: venv management, dependency install, launches `src/main_simple.py` |
-| `src/main_simple.py` | Entry point, CLI routing, both run modes, bullet parsing |
+| `run.py` | Bootstrap: venv management, dependency install, launches `src/main_simple.py` with TTY passthrough |
+| `src/main_simple.py` | Entry point, CLI routing, both run modes, engine pre-check, interactive wizard fallback |
 | `src/cli.py` | argparse definition (declarative `_ARGUMENTS` list) |
-| `src/engine_loader.py` | Canonical `load_engine()` + `EngineLoadContext` dataclass |
-| `src/engine_helpers.py` | Engine discovery, installation, input construction, loading |
+| `src/engine_loader.py` | Canonical `load_engine()` + `EngineLoadContext` dataclass + `copy_standby_profiles()` |
+| `src/engine_helpers.py` | Engine discovery, installation, input construction, loading, profile seeding |
 | `src/engine_contract.py` | `EngineInputFile` protocol — shared contract for Engine.InputFile |
-| `src/processing/markdown_parser.py` | Combined `parse_bullet()` + legacy `extract_prompt_text`/`extract_all_image_urls` |
-| `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()` |
-| `src/auth/__init__.py` | 4-tier API key resolution with `PASS_STORE_PREFIX` |
+| `src/processing/markdown_parser.py` | `parse_bullet()` — prompt + URLs (text-to-image: empty urls valid) |
+| `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
+| `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`) |
 | `src/auth/env.py` | .env file loading |
 | `src/exceptions.py` | Custom exception hierarchy including `PreflightExit` |
 | `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
@@ -119,12 +139,24 @@ main() → _run_studiolot() / _run_standalone()
 
 ## Configuration
 
-- Profiles: YAML files in `USER-FILES/03.PROFILES/` (production) or `USER-FILES/02.STANDBY/` (backup)
+- Profiles: YAML files in `USER-FILES/03.PROFILES/` (production) or `USER-FILES/02.STANDBY/` (engine-seeded backup)
 - Profile format: `platform`, `parameters`, `prompt_prefix`, `prompt_suffix`, `pricing`, `paths`, `delay_between_requests`
+- Standby profiles are engine-owned: `02.STANDBY/` is seeded by `copy_standby_profiles()` after engine install. Starts empty (`.gitkeep` only).
 - API keys: env vars per platform (`REPLICATE_API_TOKEN`, `FAL_KEY`, `OPENROUTER_API_KEY`, `GOOGLE_API_KEY`)
 - .env file: loaded from project root on startup
+- Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-04 — Session 4: Standalone Fix Batch (8/8 stubs)
+- Spec: `USER-FILES/07.TEMP/new_feature.md`
+- **Block A — Foundation (3):** Stub 8 TTY fix (`stdin=None` in run.py subprocess), Stub 2 text-to-image (removed ValueError guard for empty urls), Stub 6 unified auth error messages
+- **Block B — Engine Loader (2):** Stub 4 signature drift (dataclass stays canonical), Stub 5 pip fallback (try/except around exec_module)
+- **Block C — First-Run UX (2):** Stub 1 interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key` wired into `_run_standalone`), Stub 7 engine pre-check (fires before API key, prevents sequential cascade)
+- **Block D — Engine-Owned Profiles (2):** Stub 3 moved 10 STANDBY YAMLs out + `copy_standby_profiles()` in engine_loader + wired into `load_engine_or_install()`, empty-STANDBY `ConfigurationError` with engine install guidance
+- 7 files modified, 0 new files, all pass `ast.parse()`, all under 250L
+- Unanswered Q1-Q4 resolved by Manifesto defaults: FC-only scope, dataclass canonical, `stdin=None` TTY fix, hard-error for empty STANDBY
+- External repo changes (engine-replicate profiles, studiolot/MC engine_loader sync) documented in handoff section below
 
 ### 2026-08-04 — Session 3: Full Refactor Sweep (22/22 tasks)
 - Applied all items from `USER-FILES/07.TEMP/260804_134720_refactor_report.md`
@@ -161,6 +193,23 @@ main() → _run_studiolot() / _run_standalone()
 - `_resolve_engine_for_studiolot()` uses `load_engine()` directly while standalone mode uses `load_engine_or_install()` — slight asymmetry; both could use engine_helpers
 - 2 pre-existing test failures: `test_missing_key_raises` (real `.env` bypasses env mock) and `test_custom_path_from_profile` (needs `/tmp/test_input` to exist on disk)
 - `PreflightExit` is now caught in `main()` but studiolot mode calls `_handle_preflight_checks()` without a dedicated try/except — relies on the outer `main()` handler; works but is implicit
+- `USER-FILES/02.STANDBY/` is empty after profile migration — needs `engine-replicate` repo to add `profiles/standby/` before FC standalone mode can seed profiles via `copy_standby_profiles()`
+
+### Resolved (Session 4)
+- Stub 8: TTY broken in subprocess → `stdin=None` fix
+- Stub 2: Text-to-image blocked by ValueError → guard removed
+- Stub 6: Conflicting auth error messages → unified
+- Stub 4: engine_loader signature drift → dataclass is canonical
+- Stub 5: Corrupted local engine crashes → try/except → pip fallback
+- Stub 1: No interactive wizard → `get_api_key_interactive()` implemented + wired
+- Stub 7: Sequential cascade (API key then engine) → engine pre-check before API key
+- Stub 3: Profiles in Vehicle → moved to engine-owned, `copy_standby_profiles()` added
+- Empty STANDBY: cryptic error → install-engine guidance
+
+### External Repo Handoff (Session 4)
+- **engine-replicate**: Create `engine_replicate/profiles/standby/` with the 10 deleted YAMLs. Update `__init__.py` and `pyproject.toml` package-data.
+- **studiolot**: Create/update `pipeline/engine_loader.py` to match FC's `EngineLoadContext` dataclass signature + Stub 5 try/except fallback.
+- **motion-conductor**: Sync `src/engine_loader.py` to match FC's `EngineLoadContext` dataclass signature + Stub 5 try/except fallback.
 
 ### Resolved (Session 3)
 - `load_engine()` 6-param → `EngineLoadContext` dataclass (1 param)

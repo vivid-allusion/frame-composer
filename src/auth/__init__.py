@@ -9,6 +9,8 @@ Priority:
 
 import os
 import subprocess
+import sys
+from pathlib import Path
 from typing import Optional
 
 from loguru import logger
@@ -68,11 +70,69 @@ def get_api_key(platform: str = DEFAULT_PLATFORM) -> str:
         return api_token
 
     raise AuthenticationError(
-        f"{required_key} not set.\n"
+        f"No API key found. Set {required_key} as an env var, in pass, or in .env.\n"
         f"  - Set as env var  (export {required_key}=...)\n"
         f"  - Store in pass   (pass insert {PASS_STORE_PREFIX}{required_key.lower()})\n"
         f"  - Add to .env     (echo {required_key}=... > .env)"
     )
 
 
-__all__ = ["get_api_key", "SUPPORTED_PLATFORMS"]
+# ── interactive wizard ────────────────────────────────────────────────────────
+
+
+def _prompt_platform() -> str:
+    """Prompt user to select a platform from the supported list."""
+    print("\nAvailable platforms:")
+    for i, p in enumerate(SUPPORTED_PLATFORMS, 1):
+        print(f"  {i}. {p}")
+    while True:
+        try:
+            choice = input(
+                f"Choose platform [1-{len(SUPPORTED_PLATFORMS)}]: "
+            ).strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(SUPPORTED_PLATFORMS):
+                return SUPPORTED_PLATFORMS[idx]
+        except (ValueError, IndexError):
+            pass
+        print(f"Invalid choice. Enter 1-{len(SUPPORTED_PLATFORMS)}.")
+
+
+def _prompt_and_save_key(platform: str) -> str:
+    """Prompt for API key, persist to .env, return the key."""
+    key_name = _key_name(platform)
+    msg = (
+        f"\nNo API key found for '{platform}' ({key_name}).\n"
+        f"Key will be saved to .env - do not commit this file.\n"
+        f"Paste {key_name}: "
+    )
+    api_key = input(msg).strip()
+    if not api_key:
+        logger.error("No API key provided.")
+        sys.exit(1)
+
+    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(env_path, "a") as f:
+        f.write(f"\n{key_name}={api_key}\n")
+    os.environ[key_name] = api_key
+    logger.success(f"Saved {key_name} to .env")
+    return api_key
+
+
+def get_api_key_interactive() -> tuple[str, str]:
+    """Interactive wizard: engine selection + API key provisioning.
+
+    Returns (platform, api_key).  Exits if stdin is not a TTY.
+    """
+    if not sys.stdin.isatty():
+        raise AuthenticationError(
+            "No API key found. Run interactively (python3 run.py) for guided setup."
+        )
+
+    platform = _prompt_platform()
+    api_key = _prompt_and_save_key(platform)
+    return platform, api_key
+
+
+__all__ = ["get_api_key", "get_api_key_interactive", "SUPPORTED_PLATFORMS"]

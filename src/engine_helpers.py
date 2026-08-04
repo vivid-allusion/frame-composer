@@ -9,7 +9,7 @@ from typing import Any
 from loguru import logger
 
 from src.engine_contract import validate_input_file
-from src.engine_loader import EngineLoadContext, load_engine
+from src.engine_loader import EngineLoadContext, copy_standby_profiles, load_engine
 from src.types import Bullet
 
 
@@ -128,7 +128,7 @@ def load_engine_or_install(
     """Load engine with optional auto-install fallback on FileNotFoundError."""
     ctx = make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
     try:
-        return load_engine(ctx)
+        engine = load_engine(ctx)
     except FileNotFoundError:
         if not auto_install:
             raise
@@ -137,4 +137,8 @@ def load_engine_or_install(
             raise FileNotFoundError(
                 f"Failed to auto-install engine '{auto_install}'"
             )
-        return load_engine(ctx)
+        engine = load_engine(ctx)
+    copied = copy_standby_profiles(platform)
+    if copied:
+        logger.info(f"Seeded {copied} standby profile(s) from engine-{platform}")
+    return engine

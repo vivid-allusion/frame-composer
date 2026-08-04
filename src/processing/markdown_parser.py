@@ -51,8 +51,6 @@ def parse_bullet(markdown_content: str) -> tuple[str, list[str]]:
 
     if not prompt:
         raise ValueError("No prompt text found in markdown")
-    if not urls:
-        raise ValueError("No image URLs found in markdown")
 
     return prompt, urls
 

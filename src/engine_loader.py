@@ -7,6 +7,7 @@ then re-vendor.
 
 import importlib
 import importlib.util
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,11 +75,16 @@ def load_engine(ctx: EngineLoadContext):
     spec = importlib.util.spec_from_file_location(
         pkg_name, engine_dir / pkg_name / "__init__.py"
     )
+    pkg = None
     if spec is not None:
-        pkg = importlib.util.module_from_spec(spec)
-        sys.modules[pkg_name] = pkg
-        spec.loader.exec_module(pkg)
-    else:
+        try:
+            pkg = importlib.util.module_from_spec(spec)
+            sys.modules[pkg_name] = pkg
+            spec.loader.exec_module(pkg)
+        except Exception:
+            pkg = None
+
+    if pkg is None:
         try:
             pkg = importlib.import_module(pkg_name)
         except ImportError:
@@ -95,3 +101,36 @@ def load_engine(ctx: EngineLoadContext):
         on_progress=ctx.on_progress,
     )
     return engine
+
+
+def copy_standby_profiles(platform: str, vehicle_root: Path | None = None) -> int:
+    """Copy standby YAML profiles from engine package to Vehicle's 02.STANDBY/.
+
+    Args:
+        platform: Engine platform name (e.g. 'replicate').
+        vehicle_root: Vehicle project root.  Defaults to two levels above this file.
+
+    Returns:
+        Number of profile files copied.
+    """
+    if vehicle_root is None:
+        vehicle_root = Path(__file__).resolve().parent.parent
+
+    try:
+        pkg = importlib.import_module(f"engine_{platform}")
+    except ImportError:
+        return 0
+
+    source = Path(pkg.__file__).parent / "profiles" / "standby"
+    if not source.is_dir():
+        return 0
+
+    dest = vehicle_root / "USER-FILES" / "02.STANDBY"
+    dest.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    for yaml_file in sorted(source.glob("*.yaml")):
+        shutil.copy2(str(yaml_file), str(dest / yaml_file.name))
+        count += 1
+
+    return count

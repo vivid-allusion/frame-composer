@@ -24,7 +24,9 @@ def load_profile_standalone() -> dict[str, Any]:
         yamls = sorted(standby.glob("*.yaml")) + sorted(standby.glob("*.yml"))
     if not yamls:
         raise ConfigurationError(
-            "No profile found in USER-FILES/03.PROFILES/ or USER-FILES/02.STANDBY/"
+            "No profile found in USER-FILES/03.PROFILES/ or USER-FILES/02.STANDBY/.\n"
+            "Install an Engine first to seed standby profiles, or place a YAML profile "
+            "in USER-FILES/03.PROFILES/."
         )
     return _parse_profile_yaml(yamls[0])
 

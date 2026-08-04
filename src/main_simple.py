@@ -11,7 +11,7 @@ from typing import Any
 
 from loguru import logger
 
-from .auth import get_api_key
+from .auth import get_api_key, get_api_key_interactive
 from .cli import parse_args
 from .constants import DEFAULT_PLATFORM, __version__
 from .engine_helpers import (
@@ -209,9 +209,27 @@ def _run_standalone(args) -> int:
     profile = _apply_cli_overrides(profile, args)
     search_paths = [Path(__file__).resolve().parent.parent / "ENGINES"]
 
-    api_key = None if args.dry_run else get_api_key(platform)
-
     _handle_preflight_checks(args, bullets, profile)
+
+    # Stub 7: pre-check engine presence before API key
+    has_engine = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
+    if not has_engine and not auto_install and not sys.stdin.isatty():
+        print_engine_not_found(platform)
+        return 1
+
+    # Stub 1: resolve API key with interactive wizard fallback
+    api_key: str | None = None
+    if not args.dry_run:
+        try:
+            api_key = get_api_key(platform)
+        except AuthenticationError:
+            if sys.stdin.isatty():
+                platform, api_key = get_api_key_interactive()
+                profile["platform"] = platform
+                if not any((sp / f"engine-{platform}").is_dir() for sp in search_paths):
+                    auto_install = platform
+            else:
+                raise
 
     try:
         engine = load_engine_or_install(
