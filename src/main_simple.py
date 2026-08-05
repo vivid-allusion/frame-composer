@@ -205,6 +205,8 @@ def _run_studiolot(args) -> int:
     input_dir = Path(args.input_dir) if args.input_dir else Path(".")
 
     md_files = _read_markdown_files(input_dir)
+    if not md_files:
+        raise FileNotFoundError(f"No .md files found in {input_dir}")
     _handle_preflight_checks(args, md_files, profile)
 
     api_key = get_api_key(platform)
