@@ -15,12 +15,9 @@ from .auth import get_api_key, get_api_key_interactive
 from .cli import parse_args
 from .constants import DEFAULT_PLATFORM, __version__
 from .engine_helpers import (
-
     build_inputs,
     find_project_engines_dir,
-    load_engine_or_install,
     make_engine_ctx,
-    print_engine_not_found,
 )
 from .engine_loader import load_engine
 from .exceptions import (
@@ -29,7 +26,8 @@ from .exceptions import (
     PreflightExit,
     ValidationError,
 )
-from .processing.markdown_parser import extract_all_image_urls, extract_prompt_text
+from .processing.markdown_parser import read_markdown_files
+from .processing.first_run import handle_first_run
 from .processing.profiles import (
     load_profile_standalone,
     load_profile_studiolot,
@@ -37,37 +35,8 @@ from .processing.profiles import (
 from .types import MarkdownFile
 from .utils.logging import add_file_logging, setup_logging
 from .utils.path_resolver import (
-    create_timestamped_output_path,
     resolve_input_path,
-    resolve_output_base_path,
 )
-
-# ── markdown parsing ──────────────────────────────────────────────────────
-
-
-def _read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
-    """Read .md files from input_dir, extract prompt + reference URLs."""
-    md_files = sorted(input_dir.rglob("*.md"))
-    result: list[MarkdownFile] = []
-    for md_path in md_files:
-        content = md_path.read_text(encoding="utf-8")
-        prompt = ""
-        try:
-            prompt = extract_prompt_text(content)
-        except ValueError as e:
-            logger.warning(f"Failed to extract prompt from {md_path.name}: {e}")
-        urls: list[str] = []
-        try:
-            urls = extract_all_image_urls(content)
-        except ValueError as e:
-            logger.warning(f"Failed to extract URLs from {md_path.name}: {e}")
-        result.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
-    if not result:
-        logger.warning(f"No .md files found in {input_dir}")
-        return result
-    logger.info(f"Discovered {len(result)} markdown file(s) in {input_dir}")
-    return result
-
 
 # ── CLI / orchestration helpers ────────────────────────────────────────────────
 
@@ -204,7 +173,7 @@ def _run_studiolot(args) -> int:
 
     input_dir = Path(args.input_dir) if args.input_dir else Path(".")
 
-    md_files = _read_markdown_files(input_dir)
+    md_files = read_markdown_files(input_dir)
     if not md_files:
         raise FileNotFoundError(f"No .md files found in {input_dir}")
     _handle_preflight_checks(args, md_files, profile)
@@ -223,37 +192,10 @@ def _run_standalone(args) -> int:
         "STUDIOLOT_AUTO_INSTALL_ENGINE"
     )
 
-    # ── engine check (must come first — seeds STANDBY) ───────────────────────
-
-    has_engine = any((sp / f"engine-{platform}").is_dir() for sp in search_paths)
-
-    api_key: str | None = None
-    if not args.dry_run and not has_engine:
-        if sys.stdin.isatty():
-            platform, api_key = get_api_key_interactive()
-            auto_install = platform
-        else:
-            print_engine_not_found(platform)
-            return 1
-
-    # ── engine install (before profile — populates STANDBY shelf) ────────────
-
-    profile = {"platform": platform}
-    output_base = resolve_output_base_path(profile)
-    output_dir = create_timestamped_output_path(output_base)
-    add_file_logging(output_dir)
-
-    try:
-        engine = load_engine_or_install(
-            platform, search_paths, profile, output_dir, api_key, auto_install
-        )
-    except FileNotFoundError:
-        print_engine_not_found(platform)
-        logger.info(
-            "Re-run with --install-default-engine=replicate "
-            "to auto-install the default Engine."
-        )
+    result = handle_first_run(platform, search_paths, args.dry_run, auto_install)
+    if result is None:
         return 1
+    platform, api_key, output_dir = result
 
     # ── active profile (STANDBY is now populated) ────────────────────────────
 
@@ -273,7 +215,7 @@ def _run_standalone(args) -> int:
 
     # ── API key (engine existed but wizard was skipped) ──────────────────────
 
-    if not args.dry_run and has_engine and api_key is None:
+    if not args.dry_run and api_key is None:
         try:
             api_key = get_api_key(platform)
         except AuthenticationError:
@@ -292,7 +234,7 @@ def _run_standalone(args) -> int:
     # ── processing phase ─────────────────────────────────────────────────────
 
     input_path, _ = resolve_input_path(profile)
-    md_files = _read_markdown_files(input_path)
+    md_files = read_markdown_files(input_path)
     _handle_preflight_checks(args, md_files, profile)
 
     if not md_files:

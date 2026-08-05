@@ -32,19 +32,26 @@ def find_vehicle_engines_dir() -> Path:
 
 
 def print_engine_not_found(platform: str) -> None:
-    from src.auth import _key_name
+    from src.auth import SUPPORTED_PLATFORMS, _key_name
 
-    key_name = _key_name(platform)
-    sys.stderr.write(
-        f"\nError: No Engine found for platform '{platform}'.\n\n"
-        f"To install an Engine:\n"
-        f"  git clone https://github.com/vivid-allusion/engine-{platform}.git "
-        f"ENGINES/engine-{platform}/\n"
-        f"  pip install -r ENGINES/engine-{platform}/requirements.txt\n\n"
-        f"Or install via pip:\n"
-        f"  pip install engine-{platform}\n\n"
-        f"Set your API key in .env:  {key_name}=...\n"
+    lines = [f"\nError: No Engine found for platform '{platform}'.\n\n"]
+
+    lines.append("Supported platforms:\n\n")
+    for p in SUPPORTED_PLATFORMS:
+        p_key = _key_name(p)
+        marker = "  ← default" if p == platform else ""
+        lines.append(f"  [{p}]{marker}\n")
+        lines.append(f"    git clone https://github.com/vivid-allusion/engine-{p}.git "
+                     f"ENGINES/engine-{p}/\n")
+        lines.append(f"    pip install engine-{p}\n")
+        lines.append(f"    {p_key}=...  (in .env)\n")
+        lines.append("\n")
+
+    lines.append(
+        f"To auto-install the default engine:  python3 run.py --install-default-engine=replicate\n"
     )
+
+    sys.stderr.write("".join(lines))
 
 
 def auto_install_engine(platform: str) -> bool:

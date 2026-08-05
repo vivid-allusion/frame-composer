@@ -85,28 +85,26 @@ The Frame Composer (Vehicle) delegates all API/provider logic to Engine plugins.
 Standalone mode (TTY):
 ```
 main() → _run_standalone()
-  → _read_bullets()              # parse .md input files
-  → _handle_preflight_checks     # cost/dry-run early exit
-  → [engine pre-check]           # Stub 7: fail early if no engine + no TTY
-  → get_api_key(platform)        # 4-tier auth → wizard fallback on failure
-  → get_api_key_interactive()    # Stub 1: platform selection + API key setup
-  → load_engine_or_install()     # dynamic Engine discovery + auto-install
-  → copy_standby_profiles()      # Stub 3: seed engine profiles to 02.STANDBY/
-  → build_inputs()               # Engine.InputFile construction
-  → engine.run(inputs)           # bulk generation
-  → _report_results()            # summary + exit code
+  → handle_first_run()           # engine check → wizard → STANDBY seed
+  → load_profile_standalone()    # profile from 03.PROFILES/ or 02.STANDBY/
+  → _apply_cli_overrides()       # merge CLI flags into profile
+  → get_api_key() / wizard       # 4-tier auth with TTY fallback
+  → load_engine()                # real engine with chosen profile
+  → read_markdown_files()        # parse .md inputs
+  → _handle_preflight_checks()  # cost/dry-run early exit
+  → _execute_pipeline()          # build_inputs → engine.run() → report
 ```
 
 Studiolot mode:
 ```
 main() → _run_studiolot()
-  → _read_bullets()
-  → _handle_preflight_checks
+  → load_profile_studiolot()
+  → _apply_cli_overrides()
+  → read_markdown_files()
+  → _handle_preflight_checks()
   → get_api_key(platform)
-  → load_engine()
-  → build_inputs()
-  → engine.run(inputs)
-  → _report_results()
+  → _resolve_engine_for_studiolot()
+  → _execute_pipeline()
 ```
 
 ### CLI Modes
@@ -123,11 +121,12 @@ main() → _run_studiolot()
 | `src/main_simple.py` | Entry point, CLI routing, both run modes, engine pre-check, interactive wizard fallback |
 | `src/cli.py` | argparse definition (declarative `_ARGUMENTS` list) |
 | `src/engine_loader.py` | Canonical `load_engine()` + `EngineLoadContext` dataclass + `copy_standby_profiles()` |
-| `src/engine_helpers.py` | Engine discovery, installation, input construction, loading, profile seeding |
+| `src/engine_helpers.py` | Engine discovery, installation, input construction, loading, `print_engine_not_found()` (lists all platforms) |
 | `src/engine_contract.py` | `EngineInputFile` protocol — shared contract for Engine.InputFile |
-| `src/processing/markdown_parser.py` | `parse_bullet()` — prompt + URLs (text-to-image: empty urls valid) |
+| `src/processing/markdown_parser.py` | `parse_markdown()`, `extract_prompt_text()`, `extract_all_image_urls()`, `read_markdown_files()` — prompted + URL parsing + directory batch reader |
+| `src/processing/first_run.py` | `handle_first_run()` — engine check, wizard launch, STANDBY seeding; extracted from `_run_standalone()` |
 | `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
-| `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`) |
+| `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`, `_offer_engine_install`) |
 | `src/auth/env.py` | .env file loading |
 | `src/exceptions.py` | Custom exception hierarchy including `PreflightExit` |
 | `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
@@ -147,6 +146,16 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-05 — Session 5: TODO-Driven Review Pass (4/4 completed)
+- Spec: `USER-FILES/07.TEMP/new_feature.md` + `USER-FILES/07.TEMP/questions.md` (9 questions resolved)
+- Confirmed all 8 Session 4 stubs were already implemented; this was a review pass closing remaining gaps
+- **BACKEND/PARSING (1pt):** Fixed stale `parse_markdown()` docstring — "no image URLs found" removed (guard was removed in Session 4 but docstring wasn't updated)
+- **BACKEND/ERRORS (1pt):** `print_engine_not_found()` now iterates `SUPPORTED_PLATFORMS` and prints clone/pip/env-var instructions for all four engines, not just one
+- **BACKEND/AUTH (2pt):** Added `_offer_engine_install()` to `get_api_key_interactive()` wizard — checks `importlib.util.find_spec(f"engine_{platform}")`, offers to clone/install via `auto_install_engine()` if missing; exits with manual instructions on decline or failure
+- **ARCHITECTURE (3pt):** Created `src/processing/first_run.py` with `handle_first_run()` — extracted engine-check + TTY detection + wizard + STANDBY-seed block from `_run_standalone()`. Also moved `_read_markdown_files()` → `read_markdown_files()` into `markdown_parser.py`. `main_simple.py`: 308 → 250 lines
+- 4 files modified, 1 new file (`first_run.py`), all pass `ast.parse()`, all within file-size limits
+- Per manifesto §15, no tests written or run
 
 ### 2026-08-04 — Session 4: Standalone Fix Batch (8/8 stubs)
 - Spec: `USER-FILES/07.TEMP/new_feature.md`
