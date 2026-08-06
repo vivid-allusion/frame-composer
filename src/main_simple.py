@@ -69,22 +69,12 @@ def _handle_preflight_checks(
 
 def _report_results(results: list[Any]) -> int:
     """Summarise engine.run() results and return exit code."""
-    from rich.console import Console
-
-    console = Console()
     ok = sum(1 for r in results if r.status == "ok")
     failed = sum(1 for r in results if r.status == "error")
-
-    if failed:
-        console.print(f"\n[bold red]✗ {failed} failed[/bold red]  [green]✓ {ok} ok[/green]")
-    else:
-        console.print(f"\n[bold green]✓ All {ok} generated successfully[/bold green]")
-
+    logger.info(f"Complete: {ok} generated, {failed} errors")
     for r in results:
         if r.status == "error":
-            console.print(f"  [red]{r.source_path.name}[/red]: {r.error_msg}")
-        else:
-            console.print(f"  [dim]{r.source_path.name}[/dim] → [green]{r.path}[/green]")
+            logger.error(f"  {r.source_path.name}: {r.error_msg}")
     return 1 if failed else 0
 
 
@@ -92,15 +82,8 @@ def _execute_pipeline(
     md_files: list[MarkdownFile], engine: Any, platform: str
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report."""
-    from rich.progress import Progress
-
     inputs = build_inputs(md_files, platform)
-
-    with Progress() as progress:
-        task = progress.add_task("[cyan]Sending to AI model...", total=len(inputs))
-        results = engine.run(inputs)
-        progress.update(task, completed=len(inputs))
-
+    results = engine.run(inputs)
     return _report_results(results)
 
 
@@ -127,7 +110,7 @@ def _resolve_engine_for_studiolot(
 def main() -> int:
     args = parse_args()
     is_studiolot = bool(args.profile or args.input_dir or args.output_dir)
-    setup_logging(debug=args.debug)
+    setup_logging(debug=args.debug, verbose=args.verbose)
 
     logger.info("=" * 60)
     logger.info(f"Vivid Allusion Frame Composer v{__version__}")

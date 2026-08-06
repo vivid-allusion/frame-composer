@@ -17,11 +17,11 @@ FILE_FORMAT = (
 )
 
 
-def setup_logging(debug: bool = False) -> None:
+def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     """Configure console logging for the application."""
     logger.remove()
 
-    level = "DEBUG" if debug else "WARNING"
+    level = "DEBUG" if debug else ("INFO" if verbose else "WARNING")
     logger.add(
         sys.stderr,
         format=CONSOLE_FORMAT,

@@ -24,6 +24,10 @@ _ARGUMENTS: list[dict] = [
         "kwargs": {"action": "store_true", "help": "Enable debug output"},
     },
     {
+        "flags": ["--verbose"],
+        "kwargs": {"action": "store_true", "help": "Enable verbose (INFO level) output"},
+    },
+    {
         "flags": ["--cost-estimation"],
         "kwargs": {"action": "store_true", "help": "Estimate costs without generating"},
     },

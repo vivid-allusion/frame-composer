@@ -132,7 +132,7 @@ main() → _run_studiolot()
 | `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
 | `src/types.py` | `Bullet` TypedDict — core data structure |
 | `src/utils/path_resolver.py` | Input/output path resolution with USER-FILES defaults |
-| `src/utils/logging.py` | loguru configuration with `CONSOLE_FORMAT`/`FILE_FORMAT` constants |
+| `src/utils/logging.py` | loguru configuration — 3-tier level (WARNING/INFO/DEBUG), `CONSOLE_FORMAT`/`FILE_FORMAT` constants |
 
 ---
 
@@ -146,6 +146,19 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-06 — Session 6: Clean Per-Image Progress Output (6/6 completed)
+- Spec: `USER-FILES/07.TEMP/new_feature.md` + `USER-FILES/07.TEMP/questions.md` (3 questions, 0 resolved — feature took precedence)
+- **Goal:** Remove fake Rich progress bar, replace with engine-driven `on_progress` callback output + loguru for Vehicle messages
+- **T1 — Remove Rich Progress bar:** `_execute_pipeline()` at `src/main_simple.py:81-87` — dead `rich.progress.Progress` block replaced with plain `engine.run(inputs)`. 12 lines → 3 lines.
+- **T2 — loguru results:** `_report_results()` at `src/main_simple.py:70-78` — `rich.console.Console` replaced with `logger.info` (summary) + `logger.error` (per-file failures). Error lines always visible; summary requires `--verbose`.
+- **T3 — `--verbose` flag:** `setup_logging()` at `src/utils/logging.py:20` now accepts `verbose` param. 3-tier level: `DEBUG` (debug) > `INFO` (verbose) > `WARNING` (default). Added `--verbose` to `_ARGUMENTS` in `src/cli.py`. Wired through `main()` at `src/main_simple.py:113`.
+- **T4 — Plain stderr progress:** `_emit_progress()` at `src/engine_helpers.py:110-113` — Rich `Console(stderr=True).print("[bold blue]...")` → `sys.stderr.write` + `flush`. Engine messages bypass loguru level filter, always visible.
+- **Cleanup — Drop Rich:** Removed `rich>=13.0.0` from `requirements.txt`. Zero Rich references remain in Python source.
+- **T5 — File logging:** Verified `add_file_logging(output_dir)` already called at `src/processing/first_run.py:46` during every standalone run. No changes needed.
+- 4 files modified, `main_simple.py`: 251 → 234 lines. All pass `ast.parse()`, all under 250L.
+- **Manifesto note:** §12 previously stated "Rich for progress displays." This session removed Rich entirely — engine-driven `on_progress` callbacks provide per-image progress, loguru handles all Vehicle output. The §12 guideline is superseded by this approach for this project.
+- Per manifesto §15, no tests written or run.
 
 ### 2026-08-05 — Session 5: TODO-Driven Review Pass (4/4 completed)
 - Spec: `USER-FILES/07.TEMP/new_feature.md` + `USER-FILES/07.TEMP/questions.md` (9 questions resolved)
@@ -196,6 +209,11 @@ main() → _run_studiolot()
 ---
 
 ## Known Issues & Technical Debt
+
+### New (2026-08-06 — Session 6)
+- `_emit_progress()` writes directly to `sys.stderr` bypassing loguru — engine progress messages won't appear in file logs. The log file will only contain Vehicle-level messages (errors, summary). This may be intentional (engine output is per-run ephemera).
+- Feature spec's T5 indicated standalone had no file logging — investigation showed `add_file_logging()` was already called in `first_run.py:46`. No bug, but spec/implementation mismatch noted.
+- 3 questions in `USER-FILES/07.TEMP/questions.md` remain unanswered. Implementation proceeded from code examples in the spec rather than waiting for resolution.
 
 ### Remaining (2026-08-04)
 - `_build_inputs()` still dynamically imports `engine_{platform}` — `EngineInputFile` protocol validates the constructor signature at import time, but the per-platform dynamic import remains inherently fragile at module-load time (no way to statically verify all engines)
