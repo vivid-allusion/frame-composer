@@ -112,9 +112,9 @@ def main() -> int:
     is_studiolot = bool(args.profile or args.input_dir or args.output_dir)
     setup_logging(debug=args.debug, verbose=args.verbose)
 
-    logger.info("=" * 60)
-    logger.info(f"Vivid Allusion Frame Composer v{__version__}")
-    logger.info("=" * 60)
+    logger.debug("=" * 60)
+    logger.debug(f"Vivid Allusion Frame Composer v{__version__}")
+    logger.debug("=" * 60)
 
     try:
         if is_studiolot:

@@ -21,10 +21,10 @@ def resolve_input_path(
 
     if custom_input_path:
         input_path = Path(custom_input_path)
-        logger.info(f"Using custom input path: {input_path}")
+        logger.debug(f"Using custom input path: {input_path}")
     else:
         input_path = USER_FILES_INPUT
-        logger.info(f"Using default input path: {input_path}")
+        logger.debug(f"Using default input path: {input_path}")
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input directory not found: {input_path}")
@@ -39,10 +39,10 @@ def resolve_output_base_path(
 
     if custom_output_path:
         output_base = Path(custom_output_path)
-        logger.info(f"Using custom output path: {output_base}")
+        logger.debug(f"Using custom output path: {output_base}")
     else:
         output_base = USER_FILES_OUTPUT
-        logger.info(f"Using default output path: {output_base}")
+        logger.debug(f"Using default output path: {output_base}")
 
     return output_base
 

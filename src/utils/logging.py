@@ -21,7 +21,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
     """Configure console logging for the application."""
     logger.remove()
 
-    level = "DEBUG" if debug else ("INFO" if verbose else "WARNING")
+    level = "DEBUG" if debug else "INFO"
     logger.add(
         sys.stderr,
         format=CONSOLE_FORMAT,
@@ -29,7 +29,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         colorize=True,
     )
 
-    logger.info(f"Logging configured (debug={debug})")
+    logger.debug(f"Logging configured (debug={debug})")
 
 
 def add_file_logging(output_dir: Path) -> None:

@@ -108,8 +108,12 @@ def build_inputs(md_files: list[MarkdownFile], platform: str) -> list[Any]:
 
 
 def _emit_progress(msg: str) -> None:
-    """Write progress message to stderr immediately."""
-    sys.stderr.write(f"{msg}\n")
+    """Write progress message to stderr immediately.
+
+    msg may be a str or a ProgressEvent (duck-typed — any object with .message).
+    """
+    text = msg.message if hasattr(msg, "message") else str(msg)
+    sys.stderr.write(f"{text}\n")
     sys.stderr.flush()
 
 
@@ -153,5 +157,5 @@ def load_engine_or_install(
         engine = load_engine(ctx)
     copied = copy_standby_profiles(platform)
     if copied:
-        logger.info(f"Seeded {copied} standby profile(s) from engine-{platform}")
+        logger.debug(f"Seeded {copied} standby profile(s) from engine-{platform}")
     return engine

@@ -116,11 +116,9 @@ def install_dependencies(python_exe: Path, requirements_file: Path) -> None:
         )
         return
 
-    print("[INSTALL] Installing/updating dependencies from requirements.txt...")
     try:
         _upgrade_pip(python_exe)
         _install_requirements(python_exe, requirements_file)
-        print("[OK] Dependencies installed successfully")
     except subprocess.CalledProcessError as e:
         _handle_subprocess_error(e)
 
