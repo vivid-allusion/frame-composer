@@ -71,7 +71,7 @@ def _report_results(results: list[Any]) -> int:
     """Summarise engine.run() results and return exit code."""
     ok = sum(1 for r in results if r.status == "ok")
     failed = sum(1 for r in results if r.status == "error")
-    logger.info(f"Complete: {ok} generated, {failed} errors")
+    sys.stderr.write(f"Complete: {ok} generated, {failed} errors\n")
     for r in results:
         if r.status == "error":
             logger.error(f"  {r.source_path.name}: {r.error_msg}")
@@ -82,8 +82,28 @@ def _execute_pipeline(
     md_files: list[MarkdownFile], engine: Any, platform: str
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report."""
+    from rich.progress import Progress
+
     inputs = build_inputs(md_files, platform)
-    results = engine.run(inputs)
+    total = len(inputs)
+
+    with Progress() as bar:
+        task = bar.add_task("[cyan]Processing...", total=total)
+
+        def on_progress(msg: Any) -> None:
+            text = msg.message if hasattr(msg, "message") else str(msg)
+            bar.console.print(f"  {text}")
+            current = getattr(msg, "current", 0)
+            if current:
+                bar.update(task, completed=current)
+
+        original = engine._on_progress
+        engine._on_progress = on_progress
+        try:
+            results = engine.run(inputs)
+        finally:
+            engine._on_progress = original
+
     return _report_results(results)
 
 

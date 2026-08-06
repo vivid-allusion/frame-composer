@@ -13,6 +13,7 @@ PRD Reference: Section 05.1, 06.2
 """
 
 import re
+import sys
 import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -177,5 +178,5 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
     if not result:
         logger.warning(f"No .md files found in {input_dir}")
         return result
-    logger.info(f"Discovered {len(result)} markdown file(s) in {input_dir}")
+    sys.stderr.write(f"Discovered {len(result)} markdown file(s) in {input_dir}\n")
     return result
