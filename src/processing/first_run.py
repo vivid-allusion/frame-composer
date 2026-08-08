@@ -10,7 +10,6 @@ from typing import Any
 from loguru import logger
 
 from ..auth import get_api_key_interactive
-from ..constants import DEFAULT_PLATFORM
 from ..engine_helpers import load_engine_or_install, print_engine_not_found
 from ..utils.logging import add_file_logging
 from ..utils.path_resolver import create_timestamped_output_path, resolve_output_base_path
@@ -27,9 +26,18 @@ def handle_first_run(
     Returns (platform, api_key, output_dir) on success, None on non-TTY
     failure (caller should exit).
     """
-    has_engine = any(
-        (sp / f"engine-{platform}").is_dir() for sp in search_paths
-    )
+    has_engine = False
+    for sp in search_paths:
+        try:
+            for entry in sp.iterdir():
+                if entry.is_dir() and entry.name.startswith("engine-"):
+                    has_engine = True
+                    platform = entry.name.removeprefix("engine-")
+                    break
+        except OSError:
+            continue
+        if has_engine:
+            break
 
     api_key: str | None = None
     if not dry_run and not has_engine:
