@@ -11,8 +11,6 @@ from loguru import logger
 
 from ..auth import get_api_key_interactive
 from ..engine_helpers import load_engine_or_install, print_engine_not_found
-from ..utils.logging import add_file_logging
-from ..utils.path_resolver import create_timestamped_output_path, resolve_output_base_path
 
 
 def handle_first_run(
@@ -20,10 +18,10 @@ def handle_first_run(
     search_paths: list[Path],
     dry_run: bool,
     auto_install: str | None,
-) -> tuple[str, str | None, Path] | None:
+) -> tuple[str, str | None] | None:
     """Check for engine, launch wizard if missing, seed STANDBY profiles.
 
-    Returns (platform, api_key, output_dir) on success, None on non-TTY
+    Returns (platform, api_key) on success, None on non-TTY
     failure (caller should exit).
     """
     has_engine = False
@@ -49,13 +47,11 @@ def handle_first_run(
             return None
 
     profile: dict[str, Any] = {"platform": platform}
-    output_base = resolve_output_base_path(profile)
-    output_dir = create_timestamped_output_path(output_base)
-    add_file_logging(output_dir)
+    engine_output_dir = Path("/tmp")
 
     try:
         load_engine_or_install(
-            platform, search_paths, profile, output_dir, api_key, auto_install
+            platform, search_paths, profile, engine_output_dir, api_key, auto_install
         )
     except FileNotFoundError:
         print_engine_not_found(platform)
@@ -65,4 +61,4 @@ def handle_first_run(
         )
         return None
 
-    return platform, api_key, output_dir
+    return platform, api_key

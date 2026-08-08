@@ -199,7 +199,7 @@ def _run_standalone(args) -> int:
     result = handle_first_run(platform, search_paths, args.dry_run, auto_install)
     if result is None:
         return 1
-    platform, api_key, output_dir = result
+    platform, api_key = result
 
     # ── active profile (STANDBY is now populated) ────────────────────────────
 
@@ -216,6 +216,27 @@ def _run_standalone(args) -> int:
         return 0
 
     profile = _apply_cli_overrides(profile, args)
+
+    # ── check inputs before creating output dir ──────────────────────────────
+
+    input_path, _ = resolve_input_path(profile)
+    md_files = read_markdown_files(input_path)
+    _handle_preflight_checks(args, md_files, profile)
+
+    if not md_files:
+        logger.warning(
+            f"No .md files to process. Add .md files to {input_path} and re-run."
+        )
+        return 0
+
+    # ── output directory (only created when generation is confirmed) ────────
+
+    from .utils.path_resolver import create_timestamped_output_path, resolve_output_base_path
+    from .utils.logging import add_file_logging
+
+    output_base = resolve_output_base_path(profile)
+    output_dir = create_timestamped_output_path(output_base)
+    add_file_logging(output_dir)
 
     # ── API key (engine existed but wizard was skipped) ──────────────────────
 
@@ -234,18 +255,6 @@ def _run_standalone(args) -> int:
     engine = load_engine(
         make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
     )
-
-    # ── processing phase ─────────────────────────────────────────────────────
-
-    input_path, _ = resolve_input_path(profile)
-    md_files = read_markdown_files(input_path)
-    _handle_preflight_checks(args, md_files, profile)
-
-    if not md_files:
-        logger.warning(
-            f"No .md files to process. Add .md files to {input_path} and re-run."
-        )
-        return 0
 
     return _execute_pipeline(md_files, engine, platform)
 
