@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from ..types import MarkdownFile
+from ..datatypes import MarkdownFile
 
 if TYPE_CHECKING:
     from collections.abc import Callable

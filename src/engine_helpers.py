@@ -10,7 +10,7 @@ from loguru import logger
 
 from src.engine_contract import validate_input_file
 from src.engine_loader import EngineLoadContext, copy_standby_profiles, load_engine
-from src.types import MarkdownFile
+from src.datatypes import MarkdownFile
 
 
 def find_project_engines_dir(start_dir: Path, max_depth: int = 10) -> Path | None:

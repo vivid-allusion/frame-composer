@@ -32,7 +32,7 @@ from .processing.profiles import (
     load_profile_standalone,
     load_profile_studiolot,
 )
-from .types import MarkdownFile
+from .datatypes import MarkdownFile
 from .utils.logging import add_file_logging, setup_logging
 from .utils.path_resolver import (
     resolve_input_path,
