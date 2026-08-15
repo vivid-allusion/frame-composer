@@ -132,7 +132,7 @@ main() → _run_studiolot()
 | `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
 | `src/types.py` | `Bullet` TypedDict — core data structure |
 | `src/utils/path_resolver.py` | Input/output path resolution with USER-FILES defaults |
-| `src/utils/logging.py` | loguru configuration — 3-tier level (WARNING/INFO/DEBUG), `CONSOLE_FORMAT`/`FILE_FORMAT` constants |
+| `src/utils/logging.py` | loguru console configuration + complete-run capture: `start_output_capture()`, `captured_output()`, `write_run_logs()` (per-generated-file logs) |
 
 ---
 
@@ -146,6 +146,15 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-15 — Session 7: Complete per-file run logs (2/2 + 2 bug fixes)
+- Spec: direct author request — "log files should be much more verbose, show the complete stdout, named [same name as generated file].log"
+- **T1 — Complete output capture:** `src/utils/logging.py` — `start_output_capture()` tees stdout/stderr through `_TeeStream` (ANSI-stripped into a StringIO) and is called first thing in `main()`, before `setup_logging()` binds loguru. `write_run_logs(generated_paths, output_dir)` writes one log per generated file named `<generated-file-stem>.log` (e.g. `test-0-260815_151642.png` → `test-0-260815_151642.log`), falling back to `frame_composer_{time}.log` when nothing was generated. `add_file_logging()` + `FILE_FORMAT` deleted — superseded by full-run capture.
+- **T2 — Wiring:** `main_simple.py` — `_execute_pipeline()` gained an `output_dir` param and calls `write_run_logs()` after `_report_results()`; both run modes pass `output_dir`.
+- **Bug fix (pre-existing):** `src/engine_loader.py` — `Any`/`Callable` were TYPE_CHECKING-only imports used in runtime annotations; NameError on Python < 3.14 (lazy annotations). Moved to runtime import. MC's vendored copy has the same bug — sync later.
+- **Bug fix (new code):** `_TeeStream.encoding` must be a property — rich Console does `getattr(file, "encoding", None).lower()`, which crashes on a method.
+- Verified end-to-end against a real project (studiolot-mode run): per-file `.log` written beside the PNG with complete ANSI-clean output. Fallback path tested separately.
+- 3 files modified, all pass `ast.parse()`, all under 250L. Per manifesto §15, no tests written.
 
 ### 2026-08-06 — Session 6: Clean Per-Image Progress Output (6/6 completed)
 - Spec: `USER-FILES/07.TEMP/new_feature.md` + `USER-FILES/07.TEMP/questions.md` (3 questions, 0 resolved — feature took precedence)
@@ -210,9 +219,13 @@ main() → _run_studiolot()
 
 ## Known Issues & Technical Debt
 
+### New (2026-08-15 — Session 7)
+- Resolved: `_emit_progress()` previously bypassed loguru file sinks — the full-run capture now records engine progress, loguru output, prints, and rich progress in the per-file run logs.
+- `motion-conductor` has the same TYPE_CHECKING-only annotation import bug in its vendored `engine_loader.py` and still uses the old minimal file-log pattern — sync both when MC is next worked on.
+- Multiple generated files each get a complete-run `.log` copy (identical content). Intentional — one log per generated file per the naming contract.
+
 ### New (2026-08-06 — Session 6)
-- `_emit_progress()` writes directly to `sys.stderr` bypassing loguru — engine progress messages won't appear in file logs. The log file will only contain Vehicle-level messages (errors, summary). This may be intentional (engine output is per-run ephemera).
-- Feature spec's T5 indicated standalone had no file logging — investigation showed `add_file_logging()` was already called in `first_run.py:46`. No bug, but spec/implementation mismatch noted.
+- Feature spec's T5 indicated standalone had no file logging — investigation showed `add_file_logging()` was already called in `first_run.py:46`. No bug, but spec/implementation mismatch noted. (Superseded in Session 7 — `add_file_logging()` deleted, replaced by complete-run capture.)
 - 3 questions in `USER-FILES/07.TEMP/questions.md` remain unanswered. Implementation proceeded from code examples in the spec rather than waiting for resolution.
 
 ### Remaining (2026-08-04)

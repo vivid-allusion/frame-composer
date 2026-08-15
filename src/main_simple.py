@@ -33,7 +33,7 @@ from .processing.profiles import (
     load_profile_studiolot,
 )
 from .datatypes import MarkdownFile
-from .utils.logging import add_file_logging, setup_logging
+from .utils.logging import setup_logging, start_output_capture, write_run_logs
 from .utils.path_resolver import (
     resolve_input_path,
 )
@@ -79,9 +79,9 @@ def _report_results(results: list[Any]) -> int:
 
 
 def _execute_pipeline(
-    md_files: list[MarkdownFile], engine: Any, platform: str
+    md_files: list[MarkdownFile], engine: Any, platform: str, output_dir: Path
 ) -> int:
-    """Run the core generation pipeline: build inputs → run → report."""
+    """Run the core generation pipeline: build inputs → run → report → log."""
     from rich.progress import Progress
 
     inputs = build_inputs(md_files, platform)
@@ -104,7 +104,14 @@ def _execute_pipeline(
         finally:
             engine._on_progress = original
 
-    return _report_results(results)
+    exit_code = _report_results(results)
+    generated = [
+        r.path
+        for r in results
+        if r.status == "ok" and getattr(r, "path", None)
+    ]
+    write_run_logs(generated, output_dir)
+    return exit_code
 
 
 def _resolve_engine_for_studiolot(
@@ -130,6 +137,7 @@ def _resolve_engine_for_studiolot(
 def main() -> int:
     args = parse_args()
     is_studiolot = bool(args.profile or args.input_dir or args.output_dir)
+    start_output_capture()
     setup_logging(debug=args.debug, verbose=args.verbose)
 
     logger.debug("=" * 60)
@@ -165,7 +173,6 @@ def _run_studiolot(args) -> int:
         raise ConfigurationError("--output_dir is required in studiolot mode")
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    add_file_logging(output_dir)
 
     profile_path = Path(args.profile) if args.profile else None
     if not profile_path:
@@ -185,7 +192,7 @@ def _run_studiolot(args) -> int:
     api_key = get_api_key(platform)
     engine = _resolve_engine_for_studiolot(output_dir, platform, profile, api_key)
 
-    return _execute_pipeline(md_files, engine, platform)
+    return _execute_pipeline(md_files, engine, platform, output_dir)
 
 
 def _run_standalone(args) -> int:
@@ -232,11 +239,9 @@ def _run_standalone(args) -> int:
     # ── output directory (only created when generation is confirmed) ────────
 
     from .utils.path_resolver import create_timestamped_output_path, resolve_output_base_path
-    from .utils.logging import add_file_logging
 
     output_base = resolve_output_base_path(profile)
     output_dir = create_timestamped_output_path(output_base)
-    add_file_logging(output_dir)
 
     # ── API key (engine existed but wizard was skipped) ──────────────────────
 
@@ -256,7 +261,7 @@ def _run_standalone(args) -> int:
         make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
     )
 
-    return _execute_pipeline(md_files, engine, platform)
+    return _execute_pipeline(md_files, engine, platform, output_dir)
 
 
 if __name__ == "__main__":

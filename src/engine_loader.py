@@ -11,12 +11,9 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, Callable
 
 from .constants import DEFAULT_PLATFORM
-
-if TYPE_CHECKING:
-    from typing import Any, Callable
 
 
 @dataclass
