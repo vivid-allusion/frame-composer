@@ -16,6 +16,14 @@ _ARGUMENTS: list[dict] = [
         "kwargs": {"type": str, "default": None, "help": "Profile YAML path"},
     },
     {
+        "flags": ["--platform"],
+        "kwargs": {
+            "type": str,
+            "default": None,
+            "help": "Engine platform (overrides profile YAML)",
+        },
+    },
+    {
         "flags": ["--dry-run"],
         "kwargs": {"action": "store_true", "help": "Test without making API calls"},
     },

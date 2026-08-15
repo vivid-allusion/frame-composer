@@ -180,7 +180,8 @@ def _run_studiolot(args) -> int:
 
     profile = load_profile_studiolot(profile_path)
     profile = _apply_cli_overrides(profile, args)
-    platform = profile.get("platform") or DEFAULT_PLATFORM
+    platform = args.platform or profile.get("platform") or DEFAULT_PLATFORM
+    profile["platform"] = platform
 
     input_dir = Path(args.input_dir) if args.input_dir else Path(".")
 
