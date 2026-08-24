@@ -126,6 +126,8 @@ main() → _run_studiolot()
 | `src/processing/markdown_parser.py` | `parse_markdown()`, `extract_prompt_text()`, `extract_all_image_urls()`, `read_markdown_files()` — prompted + URL parsing + directory batch reader |
 | `src/processing/first_run.py` | `handle_first_run()` — engine check, wizard launch, STANDBY seeding; extracted from `_run_standalone()` |
 | `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
+| `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1) + `embed_payloads()` + `inject_payload()`/`read_payload()` |
+| `src/processing/payload_containers.py` | Pure byte transforms: XMP packet serializer, PNG iTXt / JPEG APP1 / WebP `XMP ` chunk envelopes + readers, `detect_format()` |
 | `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`, `_offer_engine_install`) |
 | `src/auth/env.py` | .env file loading |
 | `src/exceptions.py` | Custom exception hierarchy including `PreflightExit` |
@@ -146,6 +148,16 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-24 — Session 10: Embedded generation payload (image metadata)
+- Spec: `USER-FILES/07.TEMP/new_feature.md` + `questions.md` (3 questions resolved: no tests per manifesto §15, parsed fields only, WebP append-only without VP8X flag).
+- Goal: marry each generated image to its recipe — the payload JSON is embedded INSIDE the file (survives copies/B2 upload). Inspectable with exiftool/ImageMagick. Extraction into a bullet is deferred.
+- **T1 — `payload_containers.py`:** new module, pure byte transforms, stdlib only. One XMP packet (`dc:description`, XML-escaped) wrapped by three envelopes: PNG `iTXt` (keyword `XML:com.adobe.xmp`, inserted before IEND, CRC'd), JPEG XMP `APP1` (right after SOI; idempotent strip of a previous segment), WebP `XMP ` RIFF chunk (RIFF size bumped; VP8X flag intentionally NOT set — exiftool/reader see it, browsers won't). `detect_format()` by magic bytes. No GIF/mp4 support.
+- **T2 — `payload.py`:** `compose_payload()` — schema v1 (`schema`, `generated_at`, `vehicle`, `engine`, `endpoint`, `parameters`, `prompt` {raw, wrapped}, `prefix`, `suffix`, `reference_urls`, `input_file` relative to input root, `media_type`, `output_file`; never key material). `inject_payload()` — atomic rewrite (temp + `os.replace`), JPEG payload guard >60KB. `read_payload()` — reverses detection + XMP extraction. `embed_payloads()` — pairs results↔md_files by `source_path`, logs and continues on failure.
+- **T3 — Wiring:** `_execute_pipeline()` gained `profile` + `save_payloads: bool = True`; both run modes pass `args.save_payloads`. Embedding runs after `write_run_logs()`.
+- **Bug fix:** `_apply_cli_overrides()` no longer injects `save_payloads: False` into the API request params — the flag is gate-only now.
+- **Verification (per §15):** 24-check script (round-trip per format incl. unicode, idempotency, PNG CRC walk, JPEG SOI/APP1, WebP RIFF size, ffprobe decodability, stub-engine `_execute_pipeline` end-to-end, no-save path) + ImageMagick `Profile-xmp` confirmation + CLI `--dry-run` smoke. All passed. A real API generation remains for the author to eyeball.
+- 2 new files + `main_simple.py` modified (273 → 292).
 
 ### 2026-08-24 — Session 9: Animated live progress display
 - Spec: user report — "stdout during run doesn't show an animation, more like just spitting out frames of the progress bar"
@@ -235,6 +247,12 @@ main() → _run_studiolot()
 ---
 
 ## Known Issues & Technical Debt
+
+### New (2026-08-24 — Session 9)
+- Payload extraction (embedded payload → regenerable bullet `.md`) is deferred — no CLI/UX built on `read_payload()` yet.
+- GIF/mp4 outputs get no payload (`inject_payload` raises on unsupported format → logged, original kept). FC is image-only and png/jpg/webp cover the real cases; mp4 is MC's domain.
+- JPEG XMP `APP1` has a 2-byte length field — payloads over ~60KB are rejected with an error. Prompts run ~1-5KB, so this is theoretical.
+- WebP without `VP8X` (simple lossy files): the `XMP ` chunk is appended without a flag, so browsers won't surface it — exiftool/ImageMagick/`read_payload()` do. Deliberate per Q3.
 
 ### New (2026-08-15 — Session 7)
 - Resolved: `_emit_progress()` previously bypassed loguru file sinks — the full-run capture now records engine progress, loguru output, prints, and rich progress in the per-file run logs.

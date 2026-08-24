@@ -28,6 +28,7 @@ from .exceptions import (
 )
 from .processing.markdown_parser import read_markdown_files
 from .processing.first_run import handle_first_run
+from .processing.payload import embed_payloads
 from .processing.profiles import (
     load_profile_standalone,
     load_profile_studiolot,
@@ -47,8 +48,6 @@ def _apply_cli_overrides(profile: dict[str, Any], args: Any) -> dict[str, Any]:
     params = dict(profile.get("parameters", {}))
     if args.force_png:
         params["force_png"] = True
-    if not args.save_payloads:
-        params["save_payloads"] = False
     return {**profile, "parameters": params}
 
 
@@ -82,8 +81,10 @@ def _execute_pipeline(
     md_files: list[MarkdownFile],
     engine: Any,
     platform: str,
+    profile: dict[str, Any],
     output_dir: Path,
     input_root: Path | None = None,
+    save_payloads: bool = True,
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report → log."""
     from rich.progress import (
@@ -128,6 +129,8 @@ def _execute_pipeline(
         if r.status == "ok" and getattr(r, "path", None)
     ]
     write_run_logs(generated, output_dir)
+    if save_payloads:
+        embed_payloads(results, md_files, profile, platform, engine, input_root)
     return exit_code
 
 
@@ -210,7 +213,15 @@ def _run_studiolot(args) -> int:
     api_key = get_api_key(platform)
     engine = _resolve_engine_for_studiolot(output_dir, platform, profile, api_key)
 
-    return _execute_pipeline(md_files, engine, platform, output_dir, input_dir)
+    return _execute_pipeline(
+        md_files,
+        engine,
+        platform,
+        profile,
+        output_dir,
+        input_root=input_dir,
+        save_payloads=args.save_payloads,
+    )
 
 
 def _run_standalone(args) -> int:
@@ -279,7 +290,15 @@ def _run_standalone(args) -> int:
         make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
     )
 
-    return _execute_pipeline(md_files, engine, platform, output_dir, input_path)
+    return _execute_pipeline(
+        md_files,
+        engine,
+        platform,
+        profile,
+        output_dir,
+        input_root=input_path,
+        save_payloads=args.save_payloads,
+    )
 
 
 if __name__ == "__main__":
