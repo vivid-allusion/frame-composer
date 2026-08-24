@@ -86,17 +86,30 @@ def _execute_pipeline(
     input_root: Path | None = None,
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report → log."""
-    from rich.progress import Progress
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
 
     inputs = build_inputs(md_files, platform, input_root)
     total = len(inputs)
 
-    with Progress() as bar:
-        task = bar.add_task("[cyan]Processing...", total=total)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+    ) as bar:
+        task = bar.add_task("Processing...", total=total)
 
         def on_progress(msg: Any) -> None:
             text = msg.message if hasattr(msg, "message") else str(msg)
-            bar.console.print(f"  {text}")
+            bar.update(task, description=text)
             current = getattr(msg, "current", 0)
             if current:
                 bar.update(task, completed=current)

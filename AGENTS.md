@@ -147,6 +147,13 @@ main() → _run_studiolot()
 
 ## Session History
 
+### 2026-08-24 — Session 9: Animated live progress display
+- Spec: user report — "stdout during run doesn't show an animation, more like just spitting out frames of the progress bar"
+- Diagnosis (reproduced in a PTY): `_execute_pipeline()` printed one console line per engine event (~4 lines × N items) via `bar.console.print()`, and the default Progress bar only advanced per completed item — the live region worked, but the output read as hundreds of scrolled "frames" with a mostly-static bar.
+- **Change:** `src/main_simple.py` — Progress now uses `SpinnerColumn` + `TextColumn(description)` + `BarColumn` + `TaskProgressColumn` + `TimeElapsedColumn`; `on_progress` sets `task.description` to the current engine message (rendered in place) instead of printing a line per event.
+- Verified in a PTY: single live line, rotating spinner, ~33 in-place redraws, zero message spam; piped/non-TTY mode prints only the final state. Full messages still land in per-file `.log` via the tee capture.
+- Correction: Session 6's claim that rich was dropped from requirements was inaccurate — `rich>=13.0.0` is in `requirements.txt` and is now actively used for the live display.
+
 ### 2026-08-24 — Session 8: Mirror input folder structure in outputs
 - Spec: direct author request — "I want the folder structure of the input folder to be mirrored into the results of the output folder"
 - **T1 — `_relative_dir()`:** `src/engine_helpers.py` — new helper returns a file's parent dir relative to the input root as a posix string (`""` for root-level files; `""` fallback when `input_root` is `None` or the path is outside it).
