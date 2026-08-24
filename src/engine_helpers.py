@@ -87,8 +87,15 @@ def auto_install_engine(platform: str) -> bool:
     return True
 
 
-def build_inputs(md_files: list[MarkdownFile], platform: str) -> list[Any]:
-    """Construct InputFile objects using the Engine's datatype."""
+def build_inputs(
+    md_files: list[MarkdownFile], platform: str, input_root: Path | None = None
+) -> list[Any]:
+    """Construct InputFile objects using the Engine's datatype.
+
+    input_root enables output files to mirror the input folder structure:
+    each input's directory relative to input_root is passed to the Engine
+    as metadata["relative_dir"].
+    """
     try:
         pkg = importlib.import_module(f"engine_{platform}")
         InputFile = pkg.InputFile
@@ -102,9 +109,23 @@ def build_inputs(md_files: list[MarkdownFile], platform: str) -> list[Any]:
             path=b["path"],
             prompt=b["prompt"],
             reference_urls=b["reference_urls"],
+            metadata={
+                "relative_dir": _relative_dir(b["path"].parent, input_root)
+            },
         )
         for b in md_files
     ]
+
+
+def _relative_dir(dir_path: Path, input_root: Path | None) -> str:
+    """Return dir_path relative to input_root as a posix string ('' if root)."""
+    if input_root is None:
+        return ""
+    try:
+        rel = dir_path.relative_to(input_root)
+    except ValueError:
+        return ""
+    return "" if rel == Path(".") else rel.as_posix()
 
 
 def _emit_progress(msg: str) -> None:

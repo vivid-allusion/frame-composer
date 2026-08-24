@@ -79,12 +79,16 @@ def _report_results(results: list[Any]) -> int:
 
 
 def _execute_pipeline(
-    md_files: list[MarkdownFile], engine: Any, platform: str, output_dir: Path
+    md_files: list[MarkdownFile],
+    engine: Any,
+    platform: str,
+    output_dir: Path,
+    input_root: Path | None = None,
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report → log."""
     from rich.progress import Progress
 
-    inputs = build_inputs(md_files, platform)
+    inputs = build_inputs(md_files, platform, input_root)
     total = len(inputs)
 
     with Progress() as bar:
@@ -193,7 +197,7 @@ def _run_studiolot(args) -> int:
     api_key = get_api_key(platform)
     engine = _resolve_engine_for_studiolot(output_dir, platform, profile, api_key)
 
-    return _execute_pipeline(md_files, engine, platform, output_dir)
+    return _execute_pipeline(md_files, engine, platform, output_dir, input_dir)
 
 
 def _run_standalone(args) -> int:
@@ -262,7 +266,7 @@ def _run_standalone(args) -> int:
         make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
     )
 
-    return _execute_pipeline(md_files, engine, platform, output_dir)
+    return _execute_pipeline(md_files, engine, platform, output_dir, input_path)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,22 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from src.engine_helpers import _relative_dir
 from src.engine_loader import EngineLoadContext, load_engine
+
+
+class TestRelativeDir:
+    def test_no_input_root_returns_empty(self):
+        assert _relative_dir(Path("/tmp/in/sub"), None) == ""
+
+    def test_root_dir_returns_empty(self):
+        assert _relative_dir(Path("/tmp/in"), Path("/tmp/in")) == ""
+
+    def test_nested_dir_returns_posix_relpath(self):
+        assert _relative_dir(Path("/tmp/in/a/b"), Path("/tmp/in")) == "a/b"
+
+    def test_outside_input_root_returns_empty(self):
+        assert _relative_dir(Path("/other"), Path("/tmp/in")) == ""
 
 
 class TestLoadEngine:

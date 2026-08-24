@@ -32,7 +32,7 @@
 
 - MUST: Read inputs only from USER-FILES/04.INPUT/
 - MUST: Write outputs only to USER-FILES/05.OUTPUT/ with timestamps (YYMMDD_HHMMSS format)
-- SHOULD: Preserve input directory structure in outputs
+- MUST: Mirror input folder structure into the timestamped output directory (`relative_dir` metadata on `InputFile`)
 
 ## Python Code Standards
 
@@ -121,8 +121,8 @@ main() → _run_studiolot()
 | `src/main_simple.py` | Entry point, CLI routing, both run modes, engine pre-check, interactive wizard fallback |
 | `src/cli.py` | argparse definition (declarative `_ARGUMENTS` list) |
 | `src/engine_loader.py` | Canonical `load_engine()` + `EngineLoadContext` dataclass + `copy_standby_profiles()` |
-| `src/engine_helpers.py` | Engine discovery, installation, input construction, loading, `print_engine_not_found()` (lists all platforms) |
-| `src/engine_contract.py` | `EngineInputFile` protocol — shared contract for Engine.InputFile |
+| `src/engine_helpers.py` | Engine discovery, installation, input construction (`build_inputs()` passes `relative_dir` metadata, `_relative_dir()`), loading, `print_engine_not_found()` (lists all platforms) |
+| `src/engine_contract.py` | `EngineInputFile` protocol — shared contract for Engine.InputFile (requires `path`, `prompt`, `reference_urls`, `metadata`) |
 | `src/processing/markdown_parser.py` | `parse_markdown()`, `extract_prompt_text()`, `extract_all_image_urls()`, `read_markdown_files()` — prompted + URL parsing + directory batch reader |
 | `src/processing/first_run.py` | `handle_first_run()` — engine check, wizard launch, STANDBY seeding; extracted from `_run_standalone()` |
 | `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
@@ -146,6 +146,16 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-24 — Session 8: Mirror input folder structure in outputs
+- Spec: direct author request — "I want the folder structure of the input folder to be mirrored into the results of the output folder"
+- **T1 — `_relative_dir()`:** `src/engine_helpers.py` — new helper returns a file's parent dir relative to the input root as a posix string (`""` for root-level files; `""` fallback when `input_root` is `None` or the path is outside it).
+- **T2 — Input construction:** `src/engine_helpers.py` — `build_inputs()` gained an `input_root: Path | None` param and passes `metadata={"relative_dir": ...}` to every `InputFile`.
+- **T3 — Wiring:** `src/main_simple.py` — `_execute_pipeline()` gained an `input_root` param, threaded from both run modes (`input_dir` in studiolot, `input_path` in standalone).
+- **T4 — Contract updated:** `src/engine_contract.py` — `EngineInputFile` protocol + `validate_input_file()` now require `metadata`. Engines lacking it fail fast with a descriptive ImportError.
+- **Engine-side:** feature was already supported — `engine_replicate/engine.py` reads `item.metadata.get("relative_dir")` and writes into `output_dir/<rel_dir>`. Per-file `.log` files mirror automatically (`write_run_logs()` writes beside each generated file).
+- **Test:** `tests/test_engine_loader.py` — `TestRelativeDir` (4 cases: no root, root dir, nested dir, outside root).
+- 4 source files + 1 test file modified.
 
 ### 2026-08-15 — Session 7: Complete per-file run logs (2/2 + 2 bug fixes)
 - Spec: direct author request — "log files should be much more verbose, show the complete stdout, named [same name as generated file].log"

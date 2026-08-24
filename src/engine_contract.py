@@ -11,7 +11,14 @@ from typing import Protocol
 class EngineInputFile(Protocol):
     """Expected constructor signature for an Engine's InputFile."""
 
-    def __init__(self, *, path: Path, prompt: str, reference_urls: list[str]) -> None:
+    def __init__(
+        self,
+        *,
+        path: Path,
+        prompt: str,
+        reference_urls: list[str],
+        metadata: dict,
+    ) -> None:
         ...
 
 
@@ -25,7 +32,7 @@ def validate_input_file(input_file_cls: type, platform: str) -> None:
     import inspect
 
     sig = inspect.signature(input_file_cls.__init__)
-    required = {"path", "prompt", "reference_urls"}
+    required = {"path", "prompt", "reference_urls", "metadata"}
     params = set(sig.parameters.keys()) - {"self"}
     if not required.issubset(params):
         missing = required - params
