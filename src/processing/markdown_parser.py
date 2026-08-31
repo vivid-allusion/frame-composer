@@ -147,9 +147,14 @@ def validate_image_urls(urls: list[str], timeout: float = 5.0) -> tuple[list[str
     return valid, invalid
 
 
+def _natural_sort_key(path: Path) -> list[str | int]:
+    """Split a filename into digit/non-digit chunks for natural sorting."""
+    return [int(t) if t.isdigit() else t for t in re.split(r"(\d+)", path.name)]
+
+
 def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
     """Read .md files from input_dir, extract prompt + reference URLs."""
-    md_files = sorted(input_dir.rglob("*.md"))
+    md_files = sorted(input_dir.rglob("*.md"), key=_natural_sort_key)
     result: list[MarkdownFile] = []
     for md_path in md_files:
         content = md_path.read_text(encoding="utf-8")

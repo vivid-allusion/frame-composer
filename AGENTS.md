@@ -149,6 +149,13 @@ main() → _run_studiolot()
 
 ## Session History
 
+### 2026-08-31 — Session 11: Natural sort for input markdown files
+- Spec: user report — aborted run's generations started at `100_rw_ACM` instead of `1_rw` (natsort order).
+- Diagnosis: `read_markdown_files()` used plain `sorted()` (lexicographic). `"100_rw_ACM" < "10_rw_IH_JP_JS"` and `"10x..." < "1_rw"` because digits sort below `_` — so `100_rw_ACM.md` is first in sorted order, and the Engine faithfully numbers outputs by `enumerate(inputs)`.
+- **Fix:** `src/processing/markdown_parser.py` — added `_natural_sort_key()` (stdlib `re.split` digit chunks) and `sorted(..., key=_natural_sort_key)`. No new dependency.
+- **Test:** `tests/test_markdown_parser.py` — `TestReadMarkdownFiles.test_natural_sort_order` (1/2/10/100 → natural order). Passes.
+- Note: pytest now needed to verify locally (installed ad-hoc into venv; not in requirements.txt). 4 pre-existing test failures observed (2 documented + 2 stale: `test_no_urls_raises`, `test_creates_timestamped_dir` expecting `_GENAI` suffix).
+
 ### 2026-08-24 — Session 10: Embedded generation payload (image metadata)
 - Spec: `USER-FILES/07.TEMP/new_feature.md` + `questions.md` (3 questions resolved: no tests per manifesto §15, parsed fields only, WebP append-only without VP8X flag).
 - Goal: marry each generated image to its recipe — the payload JSON is embedded INSIDE the file (survives copies/B2 upload). Inspectable with exiftool/ImageMagick. Extraction into a bullet is deferred.

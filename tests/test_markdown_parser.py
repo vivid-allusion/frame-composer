@@ -1,7 +1,12 @@
 """Tests for markdown_parser module."""
 
 import pytest
-from src.processing.markdown_parser import extract_all_image_urls, extract_prompt_text
+
+from src.processing.markdown_parser import (
+    extract_all_image_urls,
+    extract_prompt_text,
+    read_markdown_files,
+)
 
 
 class TestExtractPromptText:
@@ -41,3 +46,17 @@ class TestExtractAllImageUrls:
     def test_no_urls_raises(self):
         with pytest.raises(ValueError, match="No image URLs"):
             extract_all_image_urls("Just a prompt\nNothing else")
+
+
+class TestReadMarkdownFiles:
+    def test_natural_sort_order(self, tmp_path):
+        for name in ["2_rw.md", "10_rw.md", "1_rw.md", "100_rw.md"]:
+            (tmp_path / name).write_text("prompt\n", encoding="utf-8")
+
+        files = read_markdown_files(tmp_path)
+        assert [f["path"].name for f in files] == [
+            "1_rw.md",
+            "2_rw.md",
+            "10_rw.md",
+            "100_rw.md",
+        ]
