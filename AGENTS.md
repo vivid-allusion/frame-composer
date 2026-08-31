@@ -126,7 +126,7 @@ main() → _run_studiolot()
 | `src/processing/markdown_parser.py` | `parse_markdown()`, `extract_prompt_text()`, `extract_all_image_urls()`, `read_markdown_files()` — prompted + URL parsing + directory batch reader |
 | `src/processing/first_run.py` | `handle_first_run()` — engine check, wizard launch, STANDBY seeding; extracted from `_run_standalone()` |
 | `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
-| `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1, optional `error` field) + `error_info()` + `fit_payload()` + `embed_payloads()` + `inject_payload()`/`read_payload()` |
+| `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1, optional `error` field) + `error_info()` + `fit_payload()` + `compose_run_payloads()` (once-per-run composition) + `embed_payloads()` + `inject_payload()`/`read_payload()` |
 | `src/processing/placeholders.py` | Vehicle-side error placeholders: `write_placeholders()` + `derive_size()` + `render_placeholder()` (Pillow) |
 | `src/processing/payload_containers.py` | Pure byte transforms: XMP packet serializer, PNG iTXt / JPEG APP1 / WebP `XMP ` chunk envelopes + readers, `detect_format()` |
 | `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`, `_offer_engine_install`) |
@@ -135,7 +135,7 @@ main() → _run_studiolot()
 | `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
 | `src/types.py` | `Bullet` TypedDict — core data structure |
 | `src/utils/path_resolver.py` | Input/output path resolution with USER-FILES defaults |
-| `src/utils/logging.py` | loguru console configuration + complete-run capture: `start_output_capture()`, `captured_output()`, `write_run_logs()` (per-generated-file logs) |
+| `src/utils/logging.py` | loguru console configuration + complete-run capture: `_TerminalCleaner` (ANSI strip + CR collapse), `start_output_capture()`, `captured_output()`, `write_run_logs()` (header + payload + capture + summary per-file logs) |
 
 ---
 
@@ -149,6 +149,16 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-31 — Session 13: Readable, LLM-friendly per-file run logs
+- Spec: `USER-FILES/07.TEMP/new_feature.md` + `questions.md` (3 questions, all answered option 1: pytest tests govern over manifesto §15, one payload per log, terminal-faithful capture accepts progress-frame loss). Problem: Session 9's rich live display floods the Session 7 capture with ~21K in-place redraws (`\r` + `\x1b[2K`) — each `.log` was a 2.2 MB "character salad" written 203×.
+- **T1 — Capture:** `src/utils/logging.py` — new `_TerminalCleaner` state machine (feeds char-by-chat, survives sequences split across write boundaries): strips all CSI (`\x1b[...final 0x40-0x7E`, incl. SGR/cursor/erase) + OSC (BEL or ST terminated); on `\r` discards the current line buffer, on `\n` finalises; `captured_output()` flushes a partial trailing line. Replaces the old SGR-only `_ANSI_ESCAPE` regex. `_TeeStream` now feeds the cleaner; the raw passthrough to the real terminal is untouched (byte-identical).
+- **T2 — Payload:** `src/processing/payload.py` — new `compose_run_payloads()` composes every payload ONCE per run, keyed by `str(output path)`: success results → `json.dumps(..., indent=2, ensure_ascii=False)`; error results → `compose_payload(..., error=error_info(...))` + `fit_payload()` (byte-identical to what the placeholder embeds). `embed_payloads(results, payloads)` now takes precomposed text; `inject_payload()`'s `payload` param is optional (raises if both payload/text missing).
+- **T3 — Wiring:** `src/main_simple.py` — `_execute_pipeline()` composes payloads right after `engine.run()`, passes them to `write_placeholders(payloads=...)` (new optional param; composes internally when omitted — placeholder tests unchanged), `write_run_logs(...)`, and `embed_payloads(...)`. Gains `run_mode` + `cli_args` params (both run modes pass them). `profiles.py` now annotates `profile["profile_path"]` so the header can cite the file.
+- **T4 — Log writer:** `write_run_logs(generated_paths, output_dir, run_info, payloads, results, md_files)` — per-file logs hold, in order: run header (version, UTC start, run mode, platform, engine, profile path + endpoint/parameters/media_type/pricing, input/output roots, CLI args, counts), the named file's own payload (one per log per Q2), the cleaned console capture, and a per-input summary (status, output, error message/code/provider-id). Fallback log (`frame_composer_<ts>.log` when nothing generated) = header + capture + summary, no payload section. Logs are always written even with `--no-save-payloads` (flag gates image embedding only). Never contains API keys.
+- **Design decisions:** terminal-faithful collapse means every intermediate progress frame vanishes (Q3 accepted); the final frame survives (terminal shows it). `Path.read_text()` must NOT be used on raw captured bytes in tests — universal-newlines mode converts `\r`→`\n` before the cleaner runs.
+- **Verification:** `tests/test_logging.py` — 21 tests: cleaner (SGR/cursor/erase/OSC-BEL/OSC-ST, CSI split across feeds, CR collapse incl. across feeds, partial-line flush, rich-session simulation, stray-escape, plain passthrough), tee (raw bytes byte-identical to target, cleaned capture), stub-engine pipeline through `_execute_pipeline` (section order, payload section byte-identical to embedded payload, error payload in placeholder log, summary coverage, all-fail fallback, no API keys, logs with `--no-save-payloads`), real-log replay (2,232,770 bytes → 4,702 chars, 0 ESC, 23 lines, tens of KB). Full suite: 58 passed, 4 pre-existing failures unchanged. black + ruff clean.
+- Line counts: `logging.py` 228, `payload.py` 194, `main_simple.py` 338 (orchestration cohesion), `test_logging.py` ~340.
 
 ### 2026-08-31 — Session 12: Vehicle-side error placeholder images
 - Spec: `USER-FILES/07.TEMP/new_feature.md` + `questions.md` (8 questions; Q3/Q4 revised by author: placeholders only after ≥1 success — all-fail runs fail fast with logs; error text at decent size, crop overflow, full details in .log). Feature goal: botched individual jobs must not leave gaps in the output serial the user places on a video-editor timeline.
@@ -267,6 +277,11 @@ main() → _run_studiolot()
 ---
 
 ## Known Issues & Technical Debt
+
+### New (2026-08-31 — Session 13)
+- Repo-wide `black --check src/` is not clean with the venv's current black version (10 files would reformat, incl. files untouched by Session 13). Previous "black clean" claims only covered changed files. Format only files you touch.
+- `tests/test_logging.py::TestRealLogReplay` depends on the external reference log at `/home/admin/Nextcloud-QO1/...` — guarded with `skipif` so the suite stays green when the path is absent.
+- Log naming: `<generated-file-stem>.log` = `Path.with_suffix(".log")` (e.g. `0-a.png` → `0-a.log`). Tests must not expect `0-a.png.log`.
 
 ### New (2026-08-31 — Session 12)
 - `USER-FILES/04.INPUT/.gitkeep` shows as deleted in the working tree (deletion predates Session 12 — not made by an agent). Harmless, but restore with `git checkout -- USER-FILES/04.INPUT/.gitkeep` if the empty-dir marker is wanted.

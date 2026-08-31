@@ -35,6 +35,7 @@ def write_placeholders(
     engine: Any,
     input_root: Path | None,
     save_payloads: bool = True,
+    payloads: dict[str, str] | None = None,
 ) -> list[Path]:
     """Write error placeholders for failed results; returns paths written."""
     by_source = {str(b["path"]): b for b in md_files}
@@ -78,16 +79,19 @@ def write_placeholders(
             expected.parent.mkdir(parents=True, exist_ok=True)
             render_placeholder(expected, result.error_msg, size)
             if save_payloads:
-                payload = compose_payload(
-                    md_file,
-                    profile,
-                    platform,
-                    engine,
-                    input_root,
-                    expected,
-                    error=error_info(result.error_msg),
-                )
-                inject_payload(expected, payload, text=fit_payload(payload))
+                text = payloads.get(str(expected)) if payloads is not None else None
+                if text is None:
+                    payload = compose_payload(
+                        md_file,
+                        profile,
+                        platform,
+                        engine,
+                        input_root,
+                        expected,
+                        error=error_info(result.error_msg),
+                    )
+                    text = fit_payload(payload)
+                inject_payload(expected, text=text)
             written.append(expected)
             logger.info(f"Placeholder written: {expected}")
         except Exception as exc:

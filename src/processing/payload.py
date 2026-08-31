@@ -89,34 +89,62 @@ def fit_payload(payload: dict[str, Any], limit: int = MAX_JPEG_PAYLOAD) -> str:
     return text
 
 
-def embed_payloads(
+def compose_run_payloads(
     results: list[Any],
     md_files: list[MarkdownFile],
     profile: dict[str, Any],
     platform: str,
     engine: Any,
     input_root: Path | None,
-) -> None:
-    """Embed every generated file's payload. Failures log and continue."""
+) -> dict[str, str]:
+    """Compose each payload once per run; keys are str(output path).
+
+    Error results use their reserved destination (expected_path) and carry
+    the structured error, so placeholder and log stay in sync.
+    """
     by_source = {str(b["path"]): b for b in md_files}
+    payloads: dict[str, str] = {}
+    for result in results:
+        out = result.path if result.status == "ok" else getattr(result, "expected_path", None)
+        md_file = by_source.get(str(result.source_path))
+        if not out or md_file is None:
+            continue
+        error = (
+            error_info(getattr(result, "error_msg", "") or "") if result.status == "error" else None
+        )
+        payload = compose_payload(md_file, profile, platform, engine, input_root, out, error=error)
+        text = (
+            fit_payload(payload)
+            if result.status == "error"
+            else json.dumps(payload, indent=2, ensure_ascii=False)
+        )
+        payloads[str(out)] = text
+    return payloads
+
+
+def embed_payloads(results: list[Any], payloads: dict[str, str]) -> None:
+    """Embed each generated file's precomposed payload. Failures log and continue."""
     for result in results:
         if getattr(result, "status", "") != "ok" or not getattr(result, "path", None):
             continue
-        md_file = by_source.get(str(result.source_path))
-        if md_file is None:
+        text = payloads.get(str(result.path))
+        if text is None:
             continue
-        payload = compose_payload(md_file, profile, platform, engine, input_root, result.path)
         try:
-            inject_payload(result.path, payload)
+            inject_payload(result.path, text=text)
             logger.debug(f"Payload embedded: {result.path.name}")
         except Exception as exc:
             logger.error(f"Failed to embed payload in {result.path.name}: {exc}")
 
 
-def inject_payload(path: Path, payload: dict[str, Any], text: str | None = None) -> None:
+def inject_payload(
+    path: Path, payload: dict[str, Any] | None = None, text: str | None = None
+) -> None:
     """Embed payload in the file at path, replacing any previous payload."""
     data = path.read_bytes()
     if text is None:
+        if payload is None:
+            raise ValueError("payload or text required")
         text = json.dumps(payload, indent=2, ensure_ascii=False)
     fmt = detect_format(data)
     if fmt == "png":

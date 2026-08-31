@@ -29,7 +29,7 @@ from .exceptions import (
 )
 from .processing.first_run import handle_first_run
 from .processing.markdown_parser import read_markdown_files
-from .processing.payload import embed_payloads
+from .processing.payload import compose_run_payloads, embed_payloads
 from .processing.placeholders import write_placeholders
 from .processing.profiles import (
     load_profile_standalone,
@@ -89,6 +89,8 @@ def _execute_pipeline(
     output_dir: Path,
     input_root: Path | None = None,
     save_payloads: bool = True,
+    run_mode: str = "standalone",
+    cli_args: dict[str, Any] | None = None,
 ) -> int:
     """Run the core generation pipeline: build inputs → run → report → log."""
     from rich.progress import (
@@ -126,6 +128,7 @@ def _execute_pipeline(
         finally:
             engine._on_progress = original
 
+    payloads = compose_run_payloads(results, md_files, profile, platform, engine, input_root)
     generated = [r.path for r in results if r.status == "ok" and getattr(r, "path", None)]
     placeholders = write_placeholders(
         results,
@@ -135,11 +138,36 @@ def _execute_pipeline(
         engine,
         input_root,
         save_payloads=save_payloads,
+        payloads=payloads if save_payloads else None,
     )
     exit_code = _report_results(results, len(placeholders))
-    write_run_logs(generated + placeholders, output_dir)
+    failed = sum(1 for r in results if r.status == "error")
+    run_info = {
+        "run_mode": run_mode,
+        "platform": platform,
+        "engine_name": getattr(engine, "PROVIDER_NAME", platform),
+        "profile_path": profile.get("profile_path"),
+        "profile": profile,
+        "input_root": str(input_root) if input_root else None,
+        "output_dir": str(output_dir),
+        "cli_args": cli_args or {},
+        "counts": {
+            "inputs": len(md_files),
+            "generated": len(generated),
+            "failed": failed,
+            "placeholders": len(placeholders),
+        },
+    }
+    write_run_logs(
+        generated + placeholders,
+        output_dir,
+        run_info=run_info,
+        payloads=payloads,
+        results=results,
+        md_files=md_files,
+    )
     if save_payloads:
-        embed_payloads(results, md_files, profile, platform, engine, input_root)
+        embed_payloads(results, payloads)
     return exit_code
 
 
@@ -228,6 +256,8 @@ def _run_studiolot(args) -> int:
         output_dir,
         input_root=input_dir,
         save_payloads=args.save_payloads,
+        run_mode="studiolot",
+        cli_args=vars(args),
     )
 
 
@@ -299,6 +329,8 @@ def _run_standalone(args) -> int:
         output_dir,
         input_root=input_path,
         save_payloads=args.save_payloads,
+        run_mode="standalone",
+        cli_args=vars(args),
     )
 
 
