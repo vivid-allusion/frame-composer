@@ -126,7 +126,8 @@ main() → _run_studiolot()
 | `src/processing/markdown_parser.py` | `parse_markdown()`, `extract_prompt_text()`, `extract_all_image_urls()`, `read_markdown_files()` — prompted + URL parsing + directory batch reader |
 | `src/processing/first_run.py` | `handle_first_run()` — engine check, wizard launch, STANDBY seeding; extracted from `_run_standalone()` |
 | `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
-| `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1) + `embed_payloads()` + `inject_payload()`/`read_payload()` |
+| `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1, optional `error` field) + `error_info()` + `fit_payload()` + `embed_payloads()` + `inject_payload()`/`read_payload()` |
+| `src/processing/placeholders.py` | Vehicle-side error placeholders: `write_placeholders()` + `derive_size()` + `render_placeholder()` (Pillow) |
 | `src/processing/payload_containers.py` | Pure byte transforms: XMP packet serializer, PNG iTXt / JPEG APP1 / WebP `XMP ` chunk envelopes + readers, `detect_format()` |
 | `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`, `_offer_engine_install`) |
 | `src/auth/env.py` | .env file loading |
@@ -148,6 +149,18 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-08-31 — Session 12: Vehicle-side error placeholder images
+- Spec: `USER-FILES/07.TEMP/new_feature.md` + `questions.md` (8 questions; Q3/Q4 revised by author: placeholders only after ≥1 success — all-fail runs fail fast with logs; error text at decent size, crop overflow, full details in .log). Feature goal: botched individual jobs must not leave gaps in the output serial the user places on a video-editor timeline.
+- **T1 — Dependency:** `requirements.txt` + `Pillow==12.3.0` (pinned). Also repaired the moved venv (recreated in place — old pyvenv.cfg pointed at `/home/admin/Downloads/frame-composer/venv`).
+- **T2 — Engine contract:** `ENGINES/engine-replicate` — `OutputFile` gains `expected_path: Path | None`. `engine.py` precomputes the destination name BEFORE the API call (`{ts}-{stem}-{idx}{ext}`, ext from profile `output_format`/media default via new `_default_extension()`) and attaches it to all three error paths. Vehicle-side naming would have broken filename-sort serial (later timestamp groups placeholders at the end).
+- **T3 — Payload:** `src/processing/payload.py` — `compose_payload()` accepts optional `error` dict; `error_info()` regex-extracts `E\d{3}` code + provider id (`p/<id>` / `prediction_id:`); `fit_payload()` halves `error.message` until the serialized JSON fits `MAX_JPEG_PAYLOAD` (keeps valid JSON); `inject_payload()` accepts pre-serialized `text`.
+- **T4 — New module `src/processing/placeholders.py`:** `write_placeholders()` (orchestrates: skip when no successes / video media_type / legacy engine / unknown size; mkdirs, renders, embeds, logs-and-continues), `derive_size()` (aspect_ratio×resolution map: 16:9/21:9/1:1/9:16 × 1K/2K, fallback to first successful image dims via Pillow header), `render_placeholder()` (red 200,0,0 bg, black text, fixed font = width//60 min 12, textwrap, crop overflow).
+- **T5/T6 — Wiring:** `_execute_pipeline()` calls `write_placeholders()` after `engine.run()` and passes placeholder paths to `write_run_logs()`; `_report_results(results, placeholders)` prints "Complete: N generated, M placeholders written, K errors" and still exits 1 when any generation failed.
+- **Engine lint fixes:** `Callable` runtime import (same TYPE_CHECKING bug family as Session 7), SDK check via `importlib.import_module` (behavior-preserving: `None in sys.modules` raises ImportError).
+- **Stale engine test fixes:** `bullet_path`→`source_path`, endpoint regex, ProgressEvent `.message` API, missing `urlretrieve` mock, `reference_param: start_image`, duration/fps moved to profile `parameters` (engine forwards params, not metadata). Engine suite now 39/39 green.
+- **Verification:** Vehicle `tests/test_placeholders.py` — 16 tests (mixed run + payload round-trip, all-fail writes nothing, legacy engine skip, video skip, relative_dir mirror, save_payloads=False, JPEG truncation of 50KB error, derive_size mapping/fallback/None, render red/black + JPEG suffix + overflow crop, error_info). Stub-engine end-to-end through `_execute_pipeline`: mixed run → 2 generated + 1 placeholder + per-file `.log`, serial intact; all-fail run → 0 placeholders, fallback log, exit 1. Vehicle suite: 4 pre-existing failures unchanged (auth .env, /tmp/test_input, stale no_urls, stale _GENAI). black + ruff clean; ast.parse ok. No real API calls made (author's request — Replicate tokens).
+- Line counts: `main_simple.py` 306 (soft-limit overrun justified: single cohesive orchestration, new logic extracted), `placeholders.py` 132, `payload.py` 166, engine.py 280 (single cohesive class).
 
 ### 2026-08-31 — Session 11: Natural sort for input markdown files
 - Spec: user report — aborted run's generations started at `100_rw_ACM` instead of `1_rw` (natsort order).
@@ -255,6 +268,10 @@ main() → _run_studiolot()
 
 ## Known Issues & Technical Debt
 
+### New (2026-08-31 — Session 12)
+- `USER-FILES/04.INPUT/.gitkeep` shows as deleted in the working tree (deletion predates Session 12 — not made by an agent). Harmless, but restore with `git checkout -- USER-FILES/04.INPUT/.gitkeep` if the empty-dir marker is wanted.
+- "Failure notification" for all-fail runs = loud stderr errors + exit 1 + fallback `frame_composer_<ts>.log` (no desktop notification). Matches revised Q3 as implemented; revisit only if the author wants OS-level alerts.
+
 ### New (2026-08-24 — Session 9)
 - Payload extraction (embedded payload → regenerable bullet `.md`) is deferred — no CLI/UX built on `read_payload()` yet.
 - GIF/mp4 outputs get no payload (`inject_payload` raises on unsupported format → logged, original kept). FC is image-only and png/jpg/webp cover the real cases; mp4 is MC's domain.
@@ -292,6 +309,10 @@ main() → _run_studiolot()
 - **engine-replicate**: Create `engine_replicate/profiles/standby/` with the 10 deleted YAMLs. Update `__init__.py` and `pyproject.toml` package-data.
 - **studiolot**: Create/update `pipeline/engine_loader.py` to match FC's `EngineLoadContext` dataclass signature + Stub 5 try/except fallback.
 - **motion-conductor**: Sync `src/engine_loader.py` to match FC's `EngineLoadContext` dataclass signature + Stub 5 try/except fallback.
+
+### External Repo Handoff (Session 12 — error placeholders)
+- **engine-replicate**: DONE — `OutputFile.expected_path` + precomputed destination names on all error paths (Session 12, 39/39 tests).
+- **engine-fal / engine-openrouter / engine-google**: Need the same `expected_path` field on error `OutputFile` (precompute destination name before the API call). Until updated, the Vehicle logs a loud error per failed slot and skips the placeholder (deliberate — see Q2). No Vehicle-side fallback naming.
 
 ### Resolved (Session 3)
 - `load_engine()` 6-param → `EngineLoadContext` dataclass (1 param)

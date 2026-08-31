@@ -6,6 +6,7 @@ embeds it as an XMP packet in PNG/JPEG/WebP; read_payload() reverses it.
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,21 @@ from .payload_containers import (
 
 MAX_JPEG_PAYLOAD = 60_000
 
+_ERROR_CODE = re.compile(r"\bE\d{3}\b")
+_ERROR_ID = re.compile(r"(?:p/|prediction[_ -]?id[:\s=]+)([A-Za-z0-9]{8,})", re.I)
+
+
+def error_info(error_msg: str) -> dict[str, Any]:
+    """Extract structured error details (code + provider id) from a message."""
+    info: dict[str, Any] = {"message": error_msg}
+    match = _ERROR_CODE.search(error_msg)
+    if match:
+        info["code"] = match.group(0)
+    match = _ERROR_ID.search(error_msg)
+    if match:
+        info["id"] = match.group(1)
+    return info
+
 
 def compose_payload(
     md_file: MarkdownFile,
@@ -35,11 +51,12 @@ def compose_payload(
     engine: Any,
     input_root: Path | None,
     out_path: Path,
+    error: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     prefix = str(profile.get("prompt_prefix", "") or "")
     suffix = str(profile.get("prompt_suffix", "") or "")
     raw = md_file["prompt"]
-    return {
+    payload: dict[str, Any] = {
         "schema": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "vehicle": {"name": "frame-composer", "version": __version__},
@@ -57,6 +74,19 @@ def compose_payload(
         "media_type": str(profile.get("media_type") or "image"),
         "output_file": out_path.name,
     }
+    if error is not None:
+        payload["error"] = error
+    return payload
+
+
+def fit_payload(payload: dict[str, Any], limit: int = MAX_JPEG_PAYLOAD) -> str:
+    """Serialize payload, truncating error.message until it fits the limit."""
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    error = payload.get("error")
+    while len(text) > limit and error and error.get("message"):
+        error["message"] = error["message"][: max(1, len(error["message"]) // 2)]
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
+    return text
 
 
 def embed_payloads(
@@ -75,9 +105,7 @@ def embed_payloads(
         md_file = by_source.get(str(result.source_path))
         if md_file is None:
             continue
-        payload = compose_payload(
-            md_file, profile, platform, engine, input_root, result.path
-        )
+        payload = compose_payload(md_file, profile, platform, engine, input_root, result.path)
         try:
             inject_payload(result.path, payload)
             logger.debug(f"Payload embedded: {result.path.name}")
@@ -85,10 +113,11 @@ def embed_payloads(
             logger.error(f"Failed to embed payload in {result.path.name}: {exc}")
 
 
-def inject_payload(path: Path, payload: dict[str, Any]) -> None:
+def inject_payload(path: Path, payload: dict[str, Any], text: str | None = None) -> None:
     """Embed payload in the file at path, replacing any previous payload."""
     data = path.read_bytes()
-    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    if text is None:
+        text = json.dumps(payload, indent=2, ensure_ascii=False)
     fmt = detect_format(data)
     if fmt == "png":
         new_data = inject_png(data, text)

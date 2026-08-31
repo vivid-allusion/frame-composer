@@ -14,6 +14,7 @@ from loguru import logger
 from .auth import get_api_key, get_api_key_interactive
 from .cli import parse_args
 from .constants import DEFAULT_PLATFORM, __version__
+from .datatypes import MarkdownFile
 from .engine_helpers import (
     build_inputs,
     find_project_engines_dir,
@@ -26,19 +27,18 @@ from .exceptions import (
     PreflightExit,
     ValidationError,
 )
-from .processing.markdown_parser import read_markdown_files
 from .processing.first_run import handle_first_run
+from .processing.markdown_parser import read_markdown_files
 from .processing.payload import embed_payloads
+from .processing.placeholders import write_placeholders
 from .processing.profiles import (
     load_profile_standalone,
     load_profile_studiolot,
 )
-from .datatypes import MarkdownFile
 from .utils.logging import setup_logging, start_output_capture, write_run_logs
 from .utils.path_resolver import (
     resolve_input_path,
 )
-
 
 # ── CLI / orchestration helpers ────────────────────────────────────────────────
 
@@ -57,20 +57,24 @@ def _handle_preflight_checks(
     if args.cost_estimation:
         total = len(md_files)
         cost = profile.get("pricing", {}).get("base_cost", 0.0)
-        logger.info(
-            f"Estimated cost: {total} files x ${cost:.3f} = ${total * cost:.2f}"
-        )
+        logger.info(f"Estimated cost: {total} files x ${cost:.3f} = ${total * cost:.2f}")
         raise PreflightExit(0)
     if args.dry_run:
         logger.info(f"DRY RUN -- would process {len(md_files)} markdown file(s)")
         raise PreflightExit(0)
 
 
-def _report_results(results: list[Any]) -> int:
+def _report_results(results: list[Any], placeholders: int = 0) -> int:
     """Summarise engine.run() results and return exit code."""
     ok = sum(1 for r in results if r.status == "ok")
     failed = sum(1 for r in results if r.status == "error")
-    sys.stderr.write(f"Complete: {ok} generated, {failed} errors\n")
+    missing = failed - placeholders
+    parts = [f"{ok} generated"]
+    if placeholders:
+        parts.append(f"{placeholders} placeholders written")
+    if missing:
+        parts.append(f"{missing} errors")
+    sys.stderr.write("Complete: " + ", ".join(parts) + "\n")
     for r in results:
         if r.status == "error":
             logger.error(f"  {r.source_path.name}: {r.error_msg}")
@@ -122,13 +126,18 @@ def _execute_pipeline(
         finally:
             engine._on_progress = original
 
-    exit_code = _report_results(results)
-    generated = [
-        r.path
-        for r in results
-        if r.status == "ok" and getattr(r, "path", None)
-    ]
-    write_run_logs(generated, output_dir)
+    generated = [r.path for r in results if r.status == "ok" and getattr(r, "path", None)]
+    placeholders = write_placeholders(
+        results,
+        md_files,
+        profile,
+        platform,
+        engine,
+        input_root,
+        save_payloads=save_payloads,
+    )
+    exit_code = _report_results(results, len(placeholders))
+    write_run_logs(generated + placeholders, output_dir)
     if save_payloads:
         embed_payloads(results, md_files, profile, platform, engine, input_root)
     return exit_code
@@ -146,9 +155,7 @@ def _resolve_engine_for_studiolot(
             "Engine directory not found. Expected 00_APPLICATIONS/ENGINES/ "
             "under the project root."
         )
-    return load_engine(
-        make_engine_ctx(platform, [project_engines], profile, output_dir, api_key)
-    )
+    return load_engine(make_engine_ctx(platform, [project_engines], profile, output_dir, api_key))
 
 
 # ── entry point ────────────────────────────────────────────────────────────────
@@ -228,9 +235,7 @@ def _run_standalone(args) -> int:
     search_paths = [Path(__file__).resolve().parent.parent / "ENGINES"]
     platform = DEFAULT_PLATFORM
 
-    auto_install = args.install_default_engine or os.environ.get(
-        "STUDIOLOT_AUTO_INSTALL_ENGINE"
-    )
+    auto_install = args.install_default_engine or os.environ.get("STUDIOLOT_AUTO_INSTALL_ENGINE")
 
     result = handle_first_run(platform, search_paths, args.dry_run, auto_install)
     if result is None:
@@ -260,9 +265,7 @@ def _run_standalone(args) -> int:
     _handle_preflight_checks(args, md_files, profile)
 
     if not md_files:
-        logger.warning(
-            f"No .md files to process. Add .md files to {input_path} and re-run."
-        )
+        logger.warning(f"No .md files to process. Add .md files to {input_path} and re-run.")
         return 0
 
     # ── output directory (only created when generation is confirmed) ────────
@@ -286,9 +289,7 @@ def _run_standalone(args) -> int:
 
     # ── engine with proper profile ───────────────────────────────────────────
 
-    engine = load_engine(
-        make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
-    )
+    engine = load_engine(make_engine_ctx(platform, search_paths, profile, output_dir, api_key))
 
     return _execute_pipeline(
         md_files,
