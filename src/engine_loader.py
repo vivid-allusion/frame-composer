@@ -8,6 +8,7 @@ then re-vendor.
 import importlib
 import importlib.util
 import shutil
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,6 +16,31 @@ from pathlib import Path
 from typing import Any
 
 from .constants import DEFAULT_PLATFORM
+
+
+def _ensure_engine_dependencies(engine_dir: Path) -> None:
+    """Install engine dependencies if requirements.txt is present.
+
+    Idempotent: pip install -r is a no-op when everything is already
+    satisfied. Called before importing the engine package so that a
+    vehicle-created venv (which only has vehicle deps) gets the engine
+    SDK automatically.
+    """
+    req = engine_dir / "requirements.txt"
+    if not req.exists():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-q", "-r", str(req)],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode() if e.stderr else ""
+        raise ImportError(
+            f"Engine dependencies at {req} failed to install. "
+            f"pip stderr: {stderr}"
+        ) from e
 
 
 @dataclass
@@ -76,6 +102,7 @@ def load_engine(ctx: EngineLoadContext):
     """
     resolved = ctx.platform or DEFAULT_PLATFORM
     engine_dir = find_engine_dir(ctx.search_paths, resolved)
+    _ensure_engine_dependencies(engine_dir)
     pkg = _load_engine_package(engine_dir, resolved)
     return pkg.Engine(
         profile=ctx.profile,
