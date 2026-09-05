@@ -47,6 +47,35 @@ class TestExtractAllImageUrls:
         urls = extract_all_image_urls("Just a prompt\nNothing else")
         assert urls == []
 
+    def test_html_commented_image_ignored(self):
+        content = (
+            "Prompt\n"
+            "![a](https://example.com/1.jpg)\n"
+            "<!-- ![b](https://example.com/2.jpg) -->\n"
+        )
+        urls = extract_all_image_urls(content)
+        assert urls == ["https://example.com/1.jpg"]
+
+    def test_html_comment_multiline_ignored(self):
+        content = (
+            "Prompt\n"
+            "<!--\n![a](https://example.com/1.jpg)\n![b](https://example.com/2.jpg)\n-->\n"
+            "![c](https://example.com/3.jpg)\n"
+        )
+        urls = extract_all_image_urls(content)
+        assert urls == ["https://example.com/3.jpg"]
+
+    def test_html_commented_raw_url_ignored(self):
+        content = "Prompt\n<!-- https://example.com/1.jpg -->\nhttps://example.com/2.jpg"
+        urls = extract_all_image_urls(content)
+        assert urls == ["https://example.com/2.jpg"]
+
+
+class TestExtractPromptTextWithComments:
+    def test_commented_first_line_becomes_empty(self):
+        content = "<!-- Old prompt -->\nNew prompt\n![x](https://a.com/1.jpg)"
+        assert extract_prompt_text(content) == "New prompt"
+
 
 class TestReadMarkdownFiles:
     def test_natural_sort_order(self, tmp_path):

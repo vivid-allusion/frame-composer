@@ -33,6 +33,7 @@ _HTML_IMG_PATTERN = re.compile(r"<img[^>]*src\s*=\s*['\"]([^'\"]+)['\"]", re.IGN
 _NON_HTTP_URL = re.compile(
     r"!\[.*?\]\((?!https?://)(\.\.?/|\.\.?\\|//|/|data:|file:|ftp:|[A-Za-z]:\\|\w+://)[^\)]+\)"
 )
+_HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def _check_line(line: str, lineno: int, warn: Callable[[str], None] | None) -> None:
@@ -80,6 +81,7 @@ def parse_markdown(
     Raises:
         ValueError: If no prompt found
     """
+    markdown_content = _HTML_COMMENT_PATTERN.sub("", markdown_content)
     lines = markdown_content.split("\n")
     prompt = ""
     urls: list[str] = []
