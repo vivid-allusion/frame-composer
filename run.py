@@ -11,9 +11,9 @@ This script:
 Usage: python3 run.py [args]
 """
 
-import sys
-import subprocess
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -48,7 +48,7 @@ def _handle_subprocess_error(e: subprocess.CalledProcessError) -> None:
 
 def _find_valid_venv(script_dir: Path) -> Path | None:
     """Return a valid venv path or None if none found."""
-    for name in ("venv", "venv_new"):
+    for name in ("venv",):
         candidate = script_dir / name
         if candidate.exists() and is_venv_valid(candidate):
             return candidate
@@ -59,9 +59,7 @@ def _create_or_repair_venv(script_dir: Path) -> Path:
     """Remove broken venvs, create a fresh one, return its path."""
     venv = script_dir / "venv"
 
-    broken_venv = script_dir / "venv" if venv.exists() else None
-    if not broken_venv:
-        broken_venv = script_dir / "venv_new" if (script_dir / "venv_new").exists() else None
+    broken_venv = venv if venv.exists() else None
     if broken_venv:
         print(f"[REPAIR] Broken virtual environment detected at {broken_venv} - repairing...")
         shutil.rmtree(broken_venv)
@@ -72,9 +70,7 @@ def _create_or_repair_venv(script_dir: Path) -> Path:
     print(f"Creating venv at: {venv}")
 
     try:
-        subprocess.run(
-            [python_exec, "-m", "venv", str(venv)], check=True, capture_output=True
-        )
+        subprocess.run([python_exec, "-m", "venv", str(venv)], check=True, capture_output=True)
         print("[OK] Virtual environment created successfully")
         return venv
     except subprocess.CalledProcessError as e:
@@ -111,9 +107,7 @@ def _install_requirements(python_exe: Path, requirements_file: Path) -> None:
 def install_dependencies(python_exe: Path, requirements_file: Path) -> None:
     """Install or update dependencies from requirements.txt."""
     if not requirements_file.exists():
-        print(
-            f"[WARN] {requirements_file} not found - skipping dependency installation"
-        )
+        print(f"[WARN] {requirements_file} not found - skipping dependency installation")
         return
 
     try:

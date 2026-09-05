@@ -14,7 +14,10 @@ from loguru import logger
 from PIL import Image, ImageDraw, ImageFont
 
 from ..datatypes import MarkdownFile
+from .context import PipelineContext
+from .markdown_parser import index_md_files
 from .payload import compose_payload, error_info, fit_payload, inject_payload
+from .results import success_paths
 
 _ASPECT_1K = {
     "21:9": (1584, 672),
@@ -28,75 +31,92 @@ FOREGROUND = (0, 0, 0)
 
 
 def write_placeholders(
+    ctx: PipelineContext,
     results: list[Any],
-    md_files: list[MarkdownFile],
-    profile: dict[str, Any],
-    platform: str,
-    engine: Any,
-    input_root: Path | None,
-    save_payloads: bool = True,
     payloads: dict[str, str] | None = None,
 ) -> list[Path]:
     """Write error placeholders for failed results; returns paths written."""
-    by_source = {str(b["path"]): b for b in md_files}
-    successes = [r.path for r in results if r.status == "ok" and getattr(r, "path", None)]
+    successes = success_paths(results)
     errors = [r for r in results if r.status == "error"]
-    if not errors:
+    if not _should_write_placeholders(errors, successes, ctx):
         return []
+    size = derive_size(ctx.profile, successes)
+    if size is None:
+        logger.error("Cannot determine placeholder size - skipping placeholders")
+        return []
+
+    by_source = index_md_files(ctx.md_files)
+    written: list[Path] = []
+    for result in errors:
+        path = _write_error_placeholder(ctx, result, by_source, payloads, size)
+        if path is not None:
+            written.append(path)
+    return written
+
+
+def _should_write_placeholders(
+    errors: list[Any],
+    successes: list[Path],
+    ctx: PipelineContext,
+) -> bool:
+    """Guard placeholders: needs errors, >=1 success, and image media_type."""
+    if not errors:
+        return False
     if not successes:
         logger.error(
             f"All {len(errors)} generation(s) failed - no images produced; "
             "no placeholders written"
         )
-        return []
-    media_type = str(profile.get("media_type") or "image")
+        return False
+    media_type = str(ctx.profile.get("media_type") or "image")
     if media_type != "image":
         logger.warning(
             f"Skipping {len(errors)} placeholder(s): media_type={media_type} "
             "is not supported (image-only)"
         )
-        return []
-    size = derive_size(profile, successes)
-    if size is None:
-        logger.error("Cannot determine placeholder size - skipping placeholders")
-        return []
+        return False
+    return True
 
-    written: list[Path] = []
-    for result in errors:
-        expected = getattr(result, "expected_path", None)
-        if not expected:
-            logger.error(
-                f"{result.source_path.name}: engine '{platform}' does not "
-                "support error placeholders - update the engine "
-                "(missing expected_path)"
-            )
-            continue
-        md_file = by_source.get(str(result.source_path))
-        if md_file is None:
-            logger.warning(f"{result.source_path.name}: no matching input - placeholder skipped")
-            continue
-        try:
-            expected.parent.mkdir(parents=True, exist_ok=True)
-            render_placeholder(expected, result.error_msg, size)
-            if save_payloads:
-                text = payloads.get(str(expected)) if payloads is not None else None
-                if text is None:
-                    payload = compose_payload(
-                        md_file,
-                        profile,
-                        platform,
-                        engine,
-                        input_root,
-                        expected,
-                        error=error_info(result.error_msg),
-                    )
-                    text = fit_payload(payload)
-                inject_payload(expected, text=text)
-            written.append(expected)
-            logger.info(f"Placeholder written: {expected}")
-        except Exception as exc:
-            logger.error(f"Failed to write placeholder for {result.source_path.name}: {exc}")
-    return written
+
+def _write_error_placeholder(
+    ctx: PipelineContext,
+    result: Any,
+    by_source: dict[str, MarkdownFile],
+    payloads: dict[str, str] | None,
+    size: tuple[int, int],
+) -> Path | None:
+    """Render one error card at its reserved path; None when skipped."""
+    expected = getattr(result, "expected_path", None)
+    if not expected:
+        logger.error(
+            f"{result.source_path.name}: engine '{ctx.platform}' does not "
+            "support error placeholders - update the engine "
+            "(missing expected_path)"
+        )
+        return None
+    md_file = by_source.get(str(result.source_path))
+    if md_file is None:
+        logger.warning(f"{result.source_path.name}: no matching input - placeholder skipped")
+        return None
+    try:
+        expected.parent.mkdir(parents=True, exist_ok=True)
+        render_placeholder(expected, result.error_msg, size)
+        if ctx.save_payloads:
+            text = payloads.get(str(expected)) if payloads is not None else None
+            if text is None:
+                payload = compose_payload(
+                    ctx,
+                    md_file,
+                    expected,
+                    error=error_info(result.error_msg),
+                )
+                text = fit_payload(payload)
+            inject_payload(expected, text=text)
+        logger.info(f"Placeholder written: {expected}")
+        return expected
+    except Exception as exc:
+        logger.error(f"Failed to write placeholder for {result.source_path.name}: {exc}")
+        return None
 
 
 def derive_size(profile: dict[str, Any], success_paths: list[Path]) -> tuple[int, int] | None:

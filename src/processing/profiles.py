@@ -1,15 +1,13 @@
 """Profile loading — standalone and studiolot modes."""
 
-import shutil
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from src.exceptions import ConfigurationError
+from ..exceptions import ConfigurationError
 
 _ACTIVE = Path("USER-FILES/03.PROFILES")
-_STANDBY = Path("USER-FILES/02.STANDBY")
 
 
 def _parse_profile_yaml(yaml_path: Path) -> dict[str, Any]:
@@ -18,22 +16,6 @@ def _parse_profile_yaml(yaml_path: Path) -> dict[str, Any]:
     data["profile_name"] = yaml_path.stem
     data["profile_path"] = str(yaml_path)
     return data
-
-
-def list_standby() -> list[Path]:
-    """Return sorted YAML paths available on the STANDBY shelf."""
-    return sorted(_STANDBY.glob("*.yaml")) + sorted(_STANDBY.glob("*.yml"))
-
-
-def activate_profile(source: Path) -> Path:
-    """Copy a YAML from STANDBY into 03.PROFILES/ to make it active.
-
-    Returns the destination path.
-    """
-    _ACTIVE.mkdir(parents=True, exist_ok=True)
-    dest = _ACTIVE / source.name
-    shutil.copy2(str(source), str(dest))
-    return dest
 
 
 def load_profile_standalone() -> dict[str, Any]:

@@ -7,6 +7,8 @@ dependencies = [
     "loguru",
     "pyyaml",
     "python-dotenv",
+    "rich",
+    "pillow",
 ]
 
 [project.scripts]

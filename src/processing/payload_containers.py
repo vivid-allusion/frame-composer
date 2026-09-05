@@ -25,7 +25,7 @@ def xmp_packet(text: str) -> bytes:
         '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">'
         f"<dc:description>{escaped}</dc:description>"
         "</rdf:Description></rdf:RDF></x:xmpmeta>"
-    ).encode("utf-8")
+    ).encode()
 
 
 def extract_description(xml: bytes) -> str:
@@ -66,10 +66,7 @@ def inject_png(data: bytes, text: str) -> bytes:
     chunks = [
         (ctype, raw)
         for ctype, raw in _png_chunks(data)
-        if not (
-            ctype.lower() == b"itxt"
-            and raw.lower().startswith(XMP_KEYWORD.lower() + b"\x00")
-        )
+        if not (ctype.lower() == b"itxt" and raw.lower().startswith(XMP_KEYWORD.lower() + b"\x00"))
     ]
     iend = next(i for i, (ctype, _) in enumerate(chunks) if ctype == b"IEND")
     packet = xmp_packet(text)
@@ -146,10 +143,7 @@ def inject_webp(data: bytes, text: str) -> bytes:
         pos += step
     packet = xmp_packet(text)
     chunk = (
-        b"XMP "
-        + struct.pack("<I", len(packet))
-        + packet
-        + (b"\x00" if len(packet) & 1 else b"")
+        b"XMP " + struct.pack("<I", len(packet)) + packet + (b"\x00" if len(packet) & 1 else b"")
     )
     rest = b"".join(kept) + chunk
     return b"RIFF" + struct.pack("<I", len(rest) + 4) + b"WEBP" + rest

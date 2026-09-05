@@ -1,8 +1,17 @@
 """Command line interface argument parsing."""
 
 import argparse
+from typing import Any, TypedDict
 
-_ARGUMENTS: list[dict] = [
+
+class _ArgumentSpec(TypedDict):
+    """Declarative spec for one argparse argument."""
+
+    flags: list[str]
+    kwargs: dict[str, Any]
+
+
+_ARGUMENTS: list[_ArgumentSpec] = [
     {
         "flags": ["--input_dir"],
         "kwargs": {"type": str, "default": None, "help": "Source folder with .md files"},
@@ -65,9 +74,7 @@ _ARGUMENTS: list[dict] = [
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Vivid Allusion Frame Composer"
-    )
+    parser = argparse.ArgumentParser(description="Vivid Allusion Frame Composer")
     parser.set_defaults(save_payloads=True)
 
     for arg in _ARGUMENTS:

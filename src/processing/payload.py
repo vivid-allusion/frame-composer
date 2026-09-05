@@ -15,6 +15,9 @@ from loguru import logger
 
 from ..constants import __version__
 from ..datatypes import MarkdownFile
+from ..utils.path_resolver import relative_posix
+from .context import PipelineContext
+from .markdown_parser import index_md_files
 from .payload_containers import (
     detect_format,
     extract_description,
@@ -45,33 +48,30 @@ def error_info(error_msg: str) -> dict[str, Any]:
 
 
 def compose_payload(
+    ctx: PipelineContext,
     md_file: MarkdownFile,
-    profile: dict[str, Any],
-    platform: str,
-    engine: Any,
-    input_root: Path | None,
     out_path: Path,
     error: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    prefix = str(profile.get("prompt_prefix", "") or "")
-    suffix = str(profile.get("prompt_suffix", "") or "")
+    prefix = str(ctx.profile.get("prompt_prefix", "") or "")
+    suffix = str(ctx.profile.get("prompt_suffix", "") or "")
     raw = md_file["prompt"]
     payload: dict[str, Any] = {
         "schema": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "vehicle": {"name": "frame-composer", "version": __version__},
         "engine": {
-            "platform": platform,
-            "provider": getattr(engine, "PROVIDER_NAME", platform),
+            "platform": ctx.platform,
+            "provider": getattr(ctx.engine, "PROVIDER_NAME", ctx.platform),
         },
-        "endpoint": profile.get("endpoint", ""),
-        "parameters": dict(profile.get("parameters", {})),
+        "endpoint": ctx.profile.get("endpoint", ""),
+        "parameters": dict(ctx.profile.get("parameters", {})),
         "prompt": {"raw": raw, "wrapped": f"{prefix}{raw}{suffix}".strip()},
         "prefix": prefix,
         "suffix": suffix,
         "reference_urls": list(md_file["reference_urls"]),
-        "input_file": _relative_input_file(md_file["path"], input_root),
-        "media_type": str(profile.get("media_type") or "image"),
+        "input_file": relative_posix(md_file["path"], ctx.input_root) or md_file["path"].name,
+        "media_type": str(ctx.profile.get("media_type") or "image"),
         "output_file": out_path.name,
     }
     if error is not None:
@@ -89,20 +89,13 @@ def fit_payload(payload: dict[str, Any], limit: int = MAX_JPEG_PAYLOAD) -> str:
     return text
 
 
-def compose_run_payloads(
-    results: list[Any],
-    md_files: list[MarkdownFile],
-    profile: dict[str, Any],
-    platform: str,
-    engine: Any,
-    input_root: Path | None,
-) -> dict[str, str]:
+def compose_run_payloads(ctx: PipelineContext, results: list[Any]) -> dict[str, str]:
     """Compose each payload once per run; keys are str(output path).
 
     Error results use their reserved destination (expected_path) and carry
     the structured error, so placeholder and log stay in sync.
     """
-    by_source = {str(b["path"]): b for b in md_files}
+    by_source = index_md_files(ctx.md_files)
     payloads: dict[str, str] = {}
     for result in results:
         out = result.path if result.status == "ok" else getattr(result, "expected_path", None)
@@ -112,7 +105,7 @@ def compose_run_payloads(
         error = (
             error_info(getattr(result, "error_msg", "") or "") if result.status == "error" else None
         )
-        payload = compose_payload(md_file, profile, platform, engine, input_root, out, error=error)
+        payload = compose_payload(ctx, md_file, out, error=error)
         text = (
             fit_payload(payload)
             if result.status == "error"
@@ -183,12 +176,3 @@ def read_payload(path: Path) -> dict[str, Any] | None:
         return json.loads(text)
     except ValueError:
         return None
-
-
-def _relative_input_file(path: Path, input_root: Path | None) -> str:
-    if input_root is not None:
-        try:
-            return path.relative_to(input_root).as_posix()
-        except ValueError:
-            pass
-    return path.name

@@ -9,10 +9,6 @@ class ConfigurationError(Exception):
     """Raised when configuration is invalid or missing."""
 
 
-class ValidationError(Exception):
-    """Raised when input validation fails."""
-
-
 class PreflightExit(Exception):
     """Raised to signal an early exit from preflight checks."""
 

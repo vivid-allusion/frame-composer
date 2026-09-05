@@ -4,6 +4,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+
 from src.auth import get_api_key
 from src.exceptions import AuthenticationError
 
@@ -21,8 +22,9 @@ class TestGetApiKey:
 
     def test_missing_key_raises(self):
         with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(AuthenticationError, match="REPLICATE_API_TOKEN not set"):
-                get_api_key("replicate")
+            with patch("src.auth.env.load_dotenv"):
+                with pytest.raises(AuthenticationError, match="No API key found"):
+                    get_api_key("replicate")
 
     def test_unknown_platform_uses_convention(self):
         key_name = "CUSTOM_API_KEY"

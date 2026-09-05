@@ -12,7 +12,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -35,7 +34,7 @@ def _key_name(platform: str) -> str:
     return _PLATFORM_KEY_MAP.get(platform, f"{platform.upper()}_API_KEY")
 
 
-def _try_pass(key_name: str) -> Optional[str]:
+def _try_pass(key_name: str) -> str | None:
     try:
         result = subprocess.run(
             ["pass", "show", f"{PASS_STORE_PREFIX}{key_name}"],
@@ -88,9 +87,7 @@ def _prompt_platform() -> str:
         print(f"  {i}. {p}")
     while True:
         try:
-            choice = input(
-                f"Choose platform [1-{len(SUPPORTED_PLATFORMS)}]: "
-            ).strip()
+            choice = input(f"Choose platform [1-{len(SUPPORTED_PLATFORMS)}]: ").strip()
             idx = int(choice) - 1
             if 0 <= idx < len(SUPPORTED_PLATFORMS):
                 return SUPPORTED_PLATFORMS[idx]
@@ -122,6 +119,16 @@ def _prompt_and_save_key(platform: str) -> str:
     return api_key
 
 
+def _print_manual_install(platform: str, lead: str = "Engine required.") -> None:
+    """Print the manual engine-install instructions and exit."""
+    print(
+        f"\n{lead} Install manually:\n"
+        f"  git clone https://github.com/vivid-allusion/engine-{platform}.git "
+        f"ENGINES/engine-{platform}/\n"
+        f"  pip install -r ENGINES/engine-{platform}/requirements.txt\n"
+    )
+
+
 def _offer_engine_install(platform: str) -> None:
     """Check if engine package is installed; offer to install if missing."""
     spec = importlib.util.find_spec(f"engine_{platform}")
@@ -131,19 +138,13 @@ def _offer_engine_install(platform: str) -> None:
     print(f"\nEngine '{platform}' is not installed.")
     choice = input("Install now? [Y/n]: ").strip().lower()
     if choice and choice != "y":
-        print(f"\nEngine required. Install manually:\n"
-              f"  git clone https://github.com/vivid-allusion/engine-{platform}.git "
-              f"ENGINES/engine-{platform}/\n"
-              f"  pip install -r ENGINES/engine-{platform}/requirements.txt\n")
+        _print_manual_install(platform)
         sys.exit(1)
 
     from ..engine_helpers import auto_install_engine
 
     if not auto_install_engine(platform):
-        print(f"\nInstall failed. Install manually:\n"
-              f"  git clone https://github.com/vivid-allusion/engine-{platform}.git "
-              f"ENGINES/engine-{platform}/\n"
-              f"  pip install -r ENGINES/engine-{platform}/requirements.txt\n")
+        _print_manual_install(platform, lead="Install failed.")
         sys.exit(1)
 
 

@@ -1,13 +1,13 @@
 """Environment variable authentication."""
+
 import os
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
 from loguru import logger
 
 
-def get_api_token_from_env(key_name: str) -> Optional[str]:
+def get_api_token_from_env(key_name: str) -> str | None:
     env_path = Path(__file__).parent.parent.parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)

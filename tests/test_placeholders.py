@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 
+from src.processing.context import PipelineContext
 from src.processing.payload import error_info, read_payload
 from src.processing.placeholders import (
     derive_size,
@@ -54,6 +55,24 @@ def _error(
 ENGINE = SimpleNamespace(PROVIDER_NAME="Stub")
 
 
+def _ctx(
+    profile: dict,
+    md_files: list,
+    platform: str = "replicate",
+    input_root: str | None = "in",
+    save_payloads: bool = True,
+) -> PipelineContext:
+    return PipelineContext(
+        md_files=md_files,
+        engine=ENGINE,
+        platform=platform,
+        profile=profile,
+        output_dir=Path("/tmp/out"),
+        input_root=Path(input_root) if input_root else None,
+        save_payloads=save_payloads,
+    )
+
+
 class TestWritePlaceholders:
     def test_mixed_run_writes_placeholder_with_payload(self, tmp_path):
         ok_path = tmp_path / "260831_110155-a-0.png"
@@ -61,7 +80,7 @@ class TestWritePlaceholders:
         expected = tmp_path / "260831_110155-b-1.png"
         results = [_ok(ok_path), _error(expected)]
 
-        written = write_placeholders(results, [_md()], _profile(), "replicate", ENGINE, Path("in"))
+        written = write_placeholders(_ctx(_profile(), [_md()]), results)
 
         assert written == [expected]
         assert expected.exists()
@@ -76,7 +95,7 @@ class TestWritePlaceholders:
         expected = tmp_path / "260831_110155-b-0.png"
         results = [_error(expected)]
 
-        written = write_placeholders(results, [_md()], _profile(), "replicate", ENGINE, Path("in"))
+        written = write_placeholders(_ctx(_profile(), [_md()]), results)
 
         assert written == []
         assert not expected.exists()
@@ -92,7 +111,7 @@ class TestWritePlaceholders:
         )
         results = [_ok(ok_path), legacy]
 
-        written = write_placeholders(results, [_md()], _profile(), "fal", ENGINE, Path("in"))
+        written = write_placeholders(_ctx(_profile(), [_md()], platform="fal"), results)
 
         assert written == []
 
@@ -102,9 +121,7 @@ class TestWritePlaceholders:
         expected = tmp_path / "260831_110155-b-1.png"
         results = [_ok(ok_path), _error(expected)]
 
-        written = write_placeholders(
-            results, [_md()], _profile(media_type="video"), "replicate", ENGINE, Path("in")
-        )
+        written = write_placeholders(_ctx(_profile(media_type="video"), [_md()]), results)
 
         assert written == []
         assert not expected.exists()
@@ -118,9 +135,7 @@ class TestWritePlaceholders:
             _error(expected, source_path="in/scene1/nested/b.md"),
         ]
 
-        written = write_placeholders(
-            results, [_md("in/scene1/nested/b.md")], _profile(), "replicate", ENGINE, Path("in")
-        )
+        written = write_placeholders(_ctx(_profile(), [_md("in/scene1/nested/b.md")]), results)
 
         assert written == [expected]
         assert expected.exists()
@@ -131,15 +146,7 @@ class TestWritePlaceholders:
         expected = tmp_path / "260831_110155-b-1.png"
         results = [_ok(ok_path), _error(expected)]
 
-        written = write_placeholders(
-            results,
-            [_md()],
-            _profile(),
-            "replicate",
-            ENGINE,
-            Path("in"),
-            save_payloads=False,
-        )
+        written = write_placeholders(_ctx(_profile(), [_md()], save_payloads=False), results)
 
         assert written == [expected]
         assert read_payload(expected) is None
@@ -151,7 +158,7 @@ class TestWritePlaceholders:
         huge = "E005 " + "sensitive " * 10_000
         results = [_ok(ok_path), _error(expected, msg=huge)]
 
-        written = write_placeholders(results, [_md()], _profile(), "replicate", ENGINE, Path("in"))
+        written = write_placeholders(_ctx(_profile(), [_md()]), results)
 
         assert written == [expected]
         payload = read_payload(expected)

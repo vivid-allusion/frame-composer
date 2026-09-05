@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
 from src.utils.path_resolver import (
     create_timestamped_output_path,
     resolve_input_path,
@@ -13,15 +14,12 @@ from src.utils.path_resolver import (
 
 class TestResolveInputPath:
     def test_default_fallback_to_user_files(self):
-        input_path, project = resolve_input_path({})
+        input_path = resolve_input_path({})
         assert input_path == Path("USER-FILES/04.INPUT")
-        assert project is None
 
-    def test_custom_path_from_profile(self):
-        profile = {"paths": {"input": "/tmp/test_input"}, "project": "myproj"}
-        input_path, project = resolve_input_path(profile)
-        assert input_path == Path("/tmp/test_input")
-        assert project == "myproj"
+    def test_custom_path_from_profile(self, tmp_path):
+        profile = {"paths": {"input": str(tmp_path)}}
+        assert resolve_input_path(profile) == tmp_path
 
     def test_raises_if_path_missing(self):
         with pytest.raises(FileNotFoundError, match="Input directory not found"):
@@ -47,4 +45,4 @@ class TestCreateTimestampedOutputPath:
             assert output.parent == base
             assert output.exists()
             assert output.is_dir()
-            assert "_GENAI" in output.name
+            assert "_IMG" in output.name

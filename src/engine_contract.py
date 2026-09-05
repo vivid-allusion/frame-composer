@@ -18,16 +18,13 @@ class EngineInputFile(Protocol):
         prompt: str,
         reference_urls: list[str],
         metadata: dict,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 def validate_input_file(input_file_cls: type, platform: str) -> None:
     """Raise a descriptive error if the class doesn't match the contract."""
     if not hasattr(input_file_cls, "__init__"):
-        raise ImportError(
-            f"Engine '{platform}' InputFile has no __init__ method"
-        )
+        raise ImportError(f"Engine '{platform}' InputFile has no __init__ method")
 
     import inspect
 

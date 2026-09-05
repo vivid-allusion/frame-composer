@@ -3,6 +3,10 @@
 Capture reduces raw terminal output to plain text (ANSI sequences stripped,
 CR redraws collapsed) so every generated file can ship a readable,
 LLM-friendly log beside it: `<generated-file-stem>.log`.
+
+Output-channel policy: loguru carries leveled diagnostics; direct stderr
+writes are reserved for always-visible critical lines (run summary,
+discovery notices). Progress events flow through the engine callback.
 """
 
 import io
@@ -14,9 +18,11 @@ from typing import Any
 
 from loguru import logger
 
-from ..constants import __version__
+from ..constants import TIMESTAMP_FORMAT, __version__
 from ..datatypes import MarkdownFile
+from ..processing.context import PipelineContext
 from ..processing.payload import error_info
+from ..processing.results import is_success
 
 CONSOLE_FORMAT = (
     "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
@@ -110,10 +116,18 @@ class _TeeStream(io.TextIOBase):
 
 
 def setup_logging(debug: bool = False, verbose: bool = False) -> None:
-    """Configure console logging for the application."""
+    """Configure console logging for the application.
+
+    Levels: DEBUG (--debug) > INFO (--verbose) > WARNING (default).
+    """
     logger.remove()
 
-    level = "DEBUG" if debug else "INFO"
+    if debug:
+        level = "DEBUG"
+    elif verbose:
+        level = "INFO"
+    else:
+        level = "WARNING"
     logger.add(
         sys.stderr,
         format=CONSOLE_FORMAT,
@@ -121,7 +135,7 @@ def setup_logging(debug: bool = False, verbose: bool = False) -> None:
         colorize=True,
     )
 
-    logger.debug(f"Logging configured (debug={debug})")
+    logger.debug(f"Logging configured (debug={debug}, verbose={verbose})")
 
 
 def start_output_capture() -> None:
@@ -140,10 +154,9 @@ def captured_output() -> str:
 def write_run_logs(
     generated_paths: list[Path],
     output_dir: Path,
-    run_info: dict[str, Any],
+    ctx: PipelineContext,
     payloads: dict[str, str],
     results: list[Any],
-    md_files: list[MarkdownFile],
 ) -> list[Path]:
     """Write one self-contained run log per generated file, named after it.
 
@@ -151,16 +164,16 @@ def write_run_logs(
     the cleaned console capture, and the per-input summary. Falls back to a
     single timestamped log in output_dir when nothing was generated.
     """
-    header = _build_header(run_info)
+    header = _build_header(ctx, results, len(generated_paths))
     capture = captured_output()
-    summary = _build_summary(results, md_files)
+    summary = _build_summary(results, ctx.md_files)
     written: list[Path] = []
     for gen_path in generated_paths:
         log_path = gen_path.with_suffix(".log")
         log_path.write_text(_log_text(header, payloads.get(str(gen_path)), capture, summary))
         written.append(log_path)
     if not written:
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        ts = datetime.now().strftime(TIMESTAMP_FORMAT)
         log_path = output_dir / f"frame_composer_{ts}.log"
         log_path.write_text(_log_text(header, None, capture, summary))
         written.append(log_path)
@@ -181,25 +194,36 @@ def _log_text(header: str, payload_text: str | None, capture: str, summary: str)
     return "\n".join(parts) + "\n"
 
 
-def _build_header(run_info: dict[str, Any]) -> str:
-    """Render the run-header section with verbose troubleshooting context."""
-    profile = run_info["profile"]
-    counts = run_info["counts"]
+def _build_header(ctx: PipelineContext, results: list[Any], total_paths: int) -> str:
+    """Render the run-header section with verbose troubleshooting context.
+
+    total_paths is len(generated + placeholder paths); placeholder count is
+    derived by subtracting successful generations from it.
+    """
+    profile = ctx.profile
+    generated = sum(1 for r in results if is_success(r))
+    failed = sum(1 for r in results if r.status == "error")
+    counts = {
+        "inputs": len(ctx.md_files),
+        "generated": generated,
+        "failed": failed,
+        "placeholders": max(0, total_paths - generated),
+    }
     lines = [
         "=== Frame Composer run log ===",
         f"vehicle: frame-composer v{__version__}",
         f"started_at: {datetime.now(timezone.utc).isoformat(timespec='seconds')} UTC",
-        f"run_mode: {run_info['run_mode']}",
-        f"platform: {run_info['platform']}",
-        f"engine: {run_info['engine_name']}",
-        f"profile: {run_info.get('profile_path') or 'unknown'}",
+        f"run_mode: {ctx.run_mode}",
+        f"platform: {ctx.platform}",
+        f"engine: {getattr(ctx.engine, 'PROVIDER_NAME', ctx.platform)}",
+        f"profile: {profile.get('profile_path') or 'unknown'}",
         f"endpoint: {profile.get('endpoint', '')}",
         f"media_type: {profile.get('media_type') or 'image'}",
         f"parameters: {json.dumps(profile.get('parameters', {}), ensure_ascii=False)}",
         f"pricing: {json.dumps(profile.get('pricing', {}), ensure_ascii=False)}",
-        f"input_root: {run_info.get('input_root')}",
-        f"output_dir: {run_info.get('output_dir')}",
-        f"cli_args: {json.dumps(run_info.get('cli_args') or {}, ensure_ascii=False)}",
+        f"input_root: {str(ctx.input_root) if ctx.input_root else None}",
+        f"output_dir: {str(ctx.output_dir)}",
+        f"cli_args: {json.dumps(ctx.cli_args, ensure_ascii=False)}",
         f"counts: inputs={counts['inputs']} generated={counts['generated']} "
         f"failed={counts['failed']} placeholders={counts['placeholders']}",
     ]

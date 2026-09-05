@@ -8,9 +8,11 @@ from typing import Any
 
 from loguru import logger
 
-from src.engine_contract import validate_input_file
-from src.engine_loader import EngineLoadContext, copy_standby_profiles, load_engine
-from src.datatypes import MarkdownFile
+from .constants import DEFAULT_PLATFORM, MEDIA_TYPE
+from .datatypes import MarkdownFile
+from .engine_contract import validate_input_file
+from .engine_loader import EngineLoadContext, copy_standby_profiles, load_engine
+from .utils.path_resolver import relative_posix
 
 
 def find_project_engines_dir(start_dir: Path, max_depth: int = 10) -> Path | None:
@@ -26,13 +28,8 @@ def find_project_engines_dir(start_dir: Path, max_depth: int = 10) -> Path | Non
     return None
 
 
-def find_vehicle_engines_dir() -> Path:
-    """Return <vehicle-root>/ENGINES/."""
-    return Path(__file__).resolve().parent.parent / "ENGINES"
-
-
 def print_engine_not_found(platform: str) -> None:
-    from src.auth import SUPPORTED_PLATFORMS, _key_name
+    from .auth import SUPPORTED_PLATFORMS, _key_name
 
     lines = [f"\nError: No Engine found for platform '{platform}'.\n\n"]
 
@@ -41,14 +38,16 @@ def print_engine_not_found(platform: str) -> None:
         p_key = _key_name(p)
         marker = "  ← default" if p == platform else ""
         lines.append(f"  [{p}]{marker}\n")
-        lines.append(f"    git clone https://github.com/vivid-allusion/engine-{p}.git "
-                     f"ENGINES/engine-{p}/\n")
+        lines.append(
+            f"    git clone https://github.com/vivid-allusion/engine-{p}.git "
+            f"ENGINES/engine-{p}/\n"
+        )
         lines.append(f"    pip install engine-{p}\n")
         lines.append(f"    {p_key}=...  (in .env)\n")
         lines.append("\n")
 
     lines.append(
-        f"To auto-install the default engine:  python3 run.py --install-default-engine=replicate\n"
+        "To auto-install the default engine:  python3 run.py --install-default-engine=replicate\n"
     )
 
     sys.stderr.write("".join(lines))
@@ -109,9 +108,7 @@ def build_inputs(
             path=b["path"],
             prompt=b["prompt"],
             reference_urls=b["reference_urls"],
-            metadata={
-                "relative_dir": _relative_dir(b["path"].parent, input_root)
-            },
+            metadata={"relative_dir": _relative_dir(b["path"].parent, input_root)},
         )
         for b in md_files
     ]
@@ -119,19 +116,15 @@ def build_inputs(
 
 def _relative_dir(dir_path: Path, input_root: Path | None) -> str:
     """Return dir_path relative to input_root as a posix string ('' if root)."""
-    if input_root is None:
-        return ""
-    try:
-        rel = dir_path.relative_to(input_root)
-    except ValueError:
-        return ""
-    return "" if rel == Path(".") else rel.as_posix()
+    return relative_posix(dir_path, input_root) or ""
 
 
 def _emit_progress(msg: str) -> None:
     """Write progress message to stderr immediately.
 
-    msg may be a str or a ProgressEvent (duck-typed — any object with .message).
+    This is the ctx-level fallback callback: the live rich display in
+    _execute_pipeline swaps the engine's private ``_on_progress`` for the
+    duration of the run, so this fires only outside that window.
     """
     text = msg.message if hasattr(msg, "message") else str(msg)
     sys.stderr.write(f"{text}\n")
@@ -156,15 +149,10 @@ def make_engine_ctx(
 
 
 def load_engine_or_install(
-    platform: str,
-    search_paths: list[Path],
-    profile: dict[str, Any],
-    output_dir: Path,
-    api_key: str | None,
+    ctx: EngineLoadContext,
     auto_install: str | None = None,
 ) -> Any:
     """Load engine with optional auto-install fallback on FileNotFoundError."""
-    ctx = make_engine_ctx(platform, search_paths, profile, output_dir, api_key)
     try:
         engine = load_engine(ctx)
     except FileNotFoundError:
@@ -172,11 +160,14 @@ def load_engine_or_install(
             raise
         logger.info(f"Auto-installing Engine: {auto_install}")
         if not auto_install_engine(auto_install):
-            raise FileNotFoundError(
-                f"Failed to auto-install engine '{auto_install}'"
-            )
+            raise FileNotFoundError(f"Failed to auto-install engine '{auto_install}'")
         engine = load_engine(ctx)
-    copied = copy_standby_profiles(platform)
+    _seed_standby_profiles(ctx.platform or DEFAULT_PLATFORM)
+    return engine
+
+
+def _seed_standby_profiles(platform: str) -> None:
+    """Copy standby profiles from the engine package into 02.STANDBY/."""
+    copied = copy_standby_profiles(platform, media_type=MEDIA_TYPE)
     if copied:
         logger.debug(f"Seeded {copied} standby profile(s) from engine-{platform}")
-    return engine

@@ -15,16 +15,13 @@ PRD Reference: Section 05.1, 06.2
 import re
 import sys
 import urllib.request
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from ..datatypes import MarkdownFile
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 
 _IMG_URL_PATTERN = re.compile(r"!\[.*?\]\((https?://[^\)]+)\)")
 _LINK_WITHOUT_BANG = re.compile(r"(?<!!)\[.*?\]\((https?://[^\)]+)\)")
@@ -38,7 +35,7 @@ _NON_HTTP_URL = re.compile(
 )
 
 
-def _check_line(line: str, lineno: int, warn: "Callable[[str], None] | None") -> None:
+def _check_line(line: str, lineno: int, warn: Callable[[str], None] | None) -> None:
     """Inspect a line for common image-embed formatting mistakes."""
     if warn is None:
         return
@@ -62,10 +59,15 @@ def _check_line(line: str, lineno: int, warn: "Callable[[str], None] | None") ->
         warn(f"Line {lineno}: HTML <img> tag found. Use markdown ![alt](URL) instead")
 
     if _NON_HTTP_URL.search(line):
-        warn(f"Line {lineno}: image URL does not start with https:// — only remote URLs are supported")
+        warn(
+            f"Line {lineno}: image URL does not start with https:// — "
+            "only remote URLs are supported"
+        )
 
 
-def parse_markdown(markdown_content: str, warn: "Callable[[str], None] | None" = None) -> tuple[str, list[str]]:
+def parse_markdown(
+    markdown_content: str, warn: Callable[[str], None] | None = None
+) -> tuple[str, list[str]]:
     """Parse a .md file, returning (prompt, image_urls) in one pass.
 
     Args:
@@ -114,37 +116,44 @@ def extract_prompt_text(markdown_content: str) -> str:
 
 
 def extract_all_image_urls(
-    markdown_content: str, warn: "Callable[[str], None] | None" = None
+    markdown_content: str, warn: Callable[[str], None] | None = None
 ) -> list[str]:
     """Extract all image URLs from markdown content, preserving order."""
     _, urls = parse_markdown(markdown_content, warn=warn)
     return urls
 
 
-def validate_image_urls(urls: list[str], timeout: float = 5.0) -> tuple[list[str], list[str]]:
+def validate_image_urls(
+    urls: list[str], timeout: float = 5.0, workers: int = 8
+) -> tuple[list[str], list[str]]:
     """Validate image URLs are reachable via HEAD request.
+
+    Checks run concurrently (bounded pool); result order is preserved.
 
     Args:
         urls: List of image URLs to check.
         timeout: Seconds per request.
+        workers: Max concurrent HEAD requests.
 
     Returns:
         Tuple of (valid_urls, invalid_urls). Invalid URLs are stripped.
     """
-    valid: list[str] = []
-    invalid: list[str] = []
     headers = {"User-Agent": "FrameComposer/1.0"}
-    for url in urls:
-        try:
-            req = urllib.request.Request(url, method="HEAD", headers=headers)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                if resp.status >= 400:
-                    invalid.append(url)
-                else:
-                    valid.append(url)
-        except Exception:
-            invalid.append(url)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        checks = list(pool.map(lambda url: _check_url(url, headers, timeout), urls))
+    valid = [url for url, ok in zip(urls, checks) if ok]
+    invalid = [url for url, ok in zip(urls, checks) if not ok]
     return valid, invalid
+
+
+def _check_url(url: str, headers: dict[str, str], timeout: float) -> bool:
+    """Return True when url answers a HEAD request below 400."""
+    try:
+        req = urllib.request.Request(url, method="HEAD", headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status < 400
+    except Exception:
+        return False
 
 
 def _natural_sort_key(path: Path) -> list[str | int]:
@@ -176,8 +185,7 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
             urls = valid
             if not urls and (valid or invalid):
                 logger.warning(
-                    f"No reachable image URLs in {md_path.name} "
-                    f"— treating as text-to-image"
+                    f"No reachable image URLs in {md_path.name} " f"— treating as text-to-image"
                 )
         result.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
     if not result:
@@ -185,3 +193,8 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
         return result
     sys.stderr.write(f"Discovered {len(result)} markdown file(s) in {input_dir}\n")
     return result
+
+
+def index_md_files(md_files: list[MarkdownFile]) -> dict[str, MarkdownFile]:
+    """Map absolute markdown path strings to their parsed files."""
+    return {str(md["path"]): md for md in md_files}

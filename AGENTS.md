@@ -129,11 +129,13 @@ main() → _run_studiolot()
 | `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1, optional `error` field) + `error_info()` + `fit_payload()` + `compose_run_payloads()` (once-per-run composition) + `embed_payloads()` + `inject_payload()`/`read_payload()` |
 | `src/processing/placeholders.py` | Vehicle-side error placeholders: `write_placeholders()` + `derive_size()` + `render_placeholder()` (Pillow) |
 | `src/processing/payload_containers.py` | Pure byte transforms: XMP packet serializer, PNG iTXt / JPEG APP1 / WebP `XMP ` chunk envelopes + readers, `detect_format()` |
+| `src/processing/context.py` | `PipelineContext` dataclass — shared orchestration state for payload/placeholder/log stages |
+| `src/processing/results.py` | `is_success()` + `success_paths()` — single source of truth for the "ok + has path" result filter |
 | `src/auth/__init__.py` | 4-tier API key resolution + interactive wizard (`get_api_key_interactive`, `_prompt_platform`, `_prompt_and_save_key`, `_offer_engine_install`) |
 | `src/auth/env.py` | .env file loading |
 | `src/exceptions.py` | Custom exception hierarchy including `PreflightExit` |
 | `src/constants.py` | Shared constants (`__version__`, `TIMESTAMP_FORMAT`, `DEFAULT_PLATFORM`) |
-| `src/types.py` | `Bullet` TypedDict — core data structure |
+| `src/datatypes.py` | `MarkdownFile` TypedDict — core data structure |
 | `src/utils/path_resolver.py` | Input/output path resolution with USER-FILES defaults |
 | `src/utils/logging.py` | loguru console configuration + complete-run capture: `_TerminalCleaner` (ANSI strip + CR collapse), `start_output_capture()`, `captured_output()`, `write_run_logs()` (header + payload + capture + summary per-file logs) |
 
@@ -149,6 +151,31 @@ main() → _run_studiolot()
 - Interactive wizard: `get_api_key_interactive()` available when `sys.stdin.isatty()` — platform selection + API key save to .env
 
 ## Session History
+
+### 2026-09-05 — Session 14: Systematic refactor from TODO backlog (32/32)
+- Spec: `USER-FILES/07.TEMP/260905_111816_refactor_report.md` (refactor analysis) → structured TODO.md (32 tasks: 3 High, 15 Med, 14 Low with IDs, effort points, pairings).
+- **T01/PipelineContext:** New `src/processing/context.py` — `PipelineContext` dataclass collapses the 6-9 param signatures of `compose_payload`, `compose_run_payloads`, `write_placeholders`, `write_run_logs`, `_execute_pipeline`. `_execute_pipeline` 9 params/88L → 1 param/~25L; progress display extracted to `_run_with_progress()` (documents the `_on_progress` swap as the de-facto Vehicle↔Engine progress contract — T04/T22).
+- **T08:** `write_placeholders` cc16/8 params → `_should_write_placeholders` + `_success_paths` + `_write_error_placeholder` (cc ~5 each).
+- **T17/T18:** `engine_loader.py` (canonical) — `load_engine` 67L/cc11 → 15L; new `find_engine_dir()` (raises, lists searched paths) + `find_first_engine_dir()`; internal `_load_engine_package()` + `_exec_from_dir()`. Error message contract unchanged. Re-vendor into motion-conductor + studiolot.
+- **T19:** `first_run.py` — `_detect_engine_platform()` reuses `find_first_engine_dir`; `load_engine_or_install` now takes ctx (T21, `_seed_standby_profiles` extracted).
+- **T02/T03:** `_prepare_profile()` (CLI overrides + platform precedence; fixes standalone ignoring `--platform`), `_load_engine_with_ctx()`, `_make_pipeline_context()` shared by both run modes.
+- **T09/T16 + T15/T20:** shared `index_md_files()` (markdown_parser) + canonical `relative_posix()` (path_resolver) with unified `None`-fallback semantics; `_relative_dir`/`_relative_input_file` delegate.
+- **T10:** `setup_logging` restored to 3-tier DEBUG > INFO(`--verbose`) > WARNING(default) — `--verbose` was dead.
+- **T12:** fallback log name uses `TIMESTAMP_FORMAT`. **T23:** `_print_manual_install()` extraction. **T26:** all `src.X` absolute imports → relative.
+- **T27:** `validate_image_urls` — bounded ThreadPoolExecutor (8 workers, order preserved). **T28 no-op:** `sorted(key=)` already precomputes keys once per element.
+- **T32:** cli `_ARGUMENTS` TypedDict spec. **Dead code removed:** `list_standby`/`activate_profile` (profiles.py), `ValidationError` (exceptions), `project_name` return (path_resolver), TYPE_CHECKING `Callable` (markdown_parser).
+- **T06:** missing active profile now exits 1 (was 0); guidance via stderr (T07/T29 policy documented in logging.py docstring).
+- **Test repairs:** 4 pre-existing failures fixed (stale `_GENAI` assertion, `/tmp/test_input` fixture, auth error-match now "No API key found", removed no-URLs ValueError guard). Tests updated to ctx-based signatures.
+- **Verification:** 62/62 tests pass; ruff (E,F,W,I,UP) clean repo-wide; black clean repo-wide (venv recreated in-project; black/ruff/pytest now installed there); compileall OK; `--help` smoke OK. New venv at `venv/` (gitignored).
+
+### 2026-09-05 — Session 15: Cleanup report execution (8/8)
+- Spec: `USER-FILES/07.TEMP/260905_145111_cleanup_report.md` (systematic cleanup analysis) → structured TODO.md (8 code tasks + 4 INFO items), all executed.
+- **Dead code removed:** `find_vehicle_engines_dir()` (engine_helpers.py — zero callers), `venv_new` repair probes in run.py `_find_valid_venv`/`_create_or_repair_venv` (Session 12 artifact; only `venv/` is ever created).
+- **Dependencies:** `replicate` removed from requirements.txt — verified `GAI_ENGINES/engine-replicate/requirements.txt` self-declares `replicate>=1.0`, so the Engine installs its own SDK. pyproject `dependencies` aligned with requirements.txt (added `rich` + `pillow`); requirements.txt remains the canonical bootstrap list.
+- **Duplicate consolidation:** new `src/processing/results.py` — `is_success()` + `success_paths()` replace the 3× duplicated `status == "ok" and path` filter (`_generated_paths` in main_simple.py, `_success_paths` in placeholders.py, inline count in logging.py `_build_header`).
+- **Docs:** README.md fully rewritten (311 → ~150 lines) to the real Engine/Vehicle architecture — removed references to deleted modules, `--no-progress`, 1Password/auth.yaml, `requests`/`natsort`, `_IMG-TO-IMG` suffix, payload `.md` files. AGENTS.md Source File Map `src/types.py | Bullet` → `src/datatypes.py | MarkdownFile` (historical Session 3 notes left untouched). run.py import order fixed (ruff --fix).
+- **Verification:** 62/62 tests, ruff clean, black clean, compileall OK. No USER-FILES changes (INFO items reviewed, left untouched per protection rules).
+- Note: Session 14 + 15 changes are still UNCOMMITTED in the working tree (`src/processing/context.py` + `src/processing/results.py` are untracked).
 
 ### 2026-08-31 — Session 13: Readable, LLM-friendly per-file run logs
 - Spec: `USER-FILES/07.TEMP/new_feature.md` + `questions.md` (3 questions, all answered option 1: pytest tests govern over manifesto §15, one payload per log, terminal-faithful capture accepts progress-frame loss). Problem: Session 9's rich live display floods the Session 7 capture with ~21K in-place redraws (`\r` + `\x1b[2K`) — each `.log` was a 2.2 MB "character salad" written 203×.
@@ -278,13 +305,26 @@ main() → _run_studiolot()
 
 ## Known Issues & Technical Debt
 
+### New (2026-09-05 — Session 15)
+- Session 14 + 15 changes are UNCOMMITTED; `src/processing/context.py` and `src/processing/results.py` are untracked (`git add` both on next commit).
+- `requirements.txt` uses `>=` pins (dotenv/loguru/yaml/rich) against the AGENTS.md "pin exact versions" rule — pre-existing gap, not addressed in cleanup; pin when dependencies next change.
+- `pyproject.toml` dependencies are unpinned (`rich`, `pillow` added in Session 15) while requirements.txt pins `Pillow==12.3.0` — requirements.txt is canonical for venv bootstrap; keep the two aligned by package SET, accept version-spec divergence.
+- `src/processing/results.py` helpers (`is_success`/`success_paths`) have no dedicated unit tests — covered indirectly by test_logging/test_placeholders (62 green). Add direct tests if they grow beyond the one-liner filter.
+- `USER-FILES/01.CONFIG/config.yaml` is legacy and unread by any code path — it WILL look like config bloat to future cleanup scans; deliberately kept (USER-FILES protection). Do not re-flag.
+
+### New (2026-09-05 — Session 14)
+- `engine_loader.py` was split (`find_engine_dir()`, `find_first_engine_dir()`, `_load_engine_package()`, `_exec_from_dir()`) and `load_engine_or_install()` now takes an `EngineLoadContext`. motion-conductor + studiolot still vendor the old monolithic snapshot — re-vendor before they diverge further.
+- `_run_standalone` is ~58 lines (SHOULD <50) — accepted: single cohesive orchestration; further splits would scatter state.
+- `_write_error_placeholder` takes 5 params (ctx, result, by_source, payloads, size) — fold `by_source` into a per-run lookup if it grows further.
+- `_on_progress` swap remains an engine-private API touch, now documented in `_run_with_progress()` as the de-facto Vehicle↔Engine progress contract. A public hook requires engine-repo changes (out of Vehicle scope).
+
 ### New (2026-08-31 — Session 13)
-- Repo-wide `black --check src/` is not clean with the venv's current black version (10 files would reformat, incl. files untouched by Session 13). Previous "black clean" claims only covered changed files. Format only files you touch.
+- ~~Repo-wide `black --check src/` is not clean~~ Resolved in Session 14 — black + ruff now clean repo-wide (black/ruff/pytest installed in the in-project venv).
 - `tests/test_logging.py::TestRealLogReplay` depends on the external reference log at `/home/admin/Nextcloud-QO1/...` — guarded with `skipif` so the suite stays green when the path is absent.
 - Log naming: `<generated-file-stem>.log` = `Path.with_suffix(".log")` (e.g. `0-a.png` → `0-a.log`). Tests must not expect `0-a.png.log`.
 
 ### New (2026-08-31 — Session 12)
-- `USER-FILES/04.INPUT/.gitkeep` shows as deleted in the working tree (deletion predates Session 12 — not made by an agent). Harmless, but restore with `git checkout -- USER-FILES/04.INPUT/.gitkeep` if the empty-dir marker is wanted.
+- ~~`USER-FILES/04.INPUT/.gitkeep` shows as deleted~~ Resolved — no longer shows in the working tree.
 - "Failure notification" for all-fail runs = loud stderr errors + exit 1 + fallback `frame_composer_<ts>.log` (no desktop notification). Matches revised Q3 as implemented; revisit only if the author wants OS-level alerts.
 
 ### New (2026-08-24 — Session 9)
@@ -304,8 +344,8 @@ main() → _run_studiolot()
 
 ### Remaining (2026-08-04)
 - `_build_inputs()` still dynamically imports `engine_{platform}` — `EngineInputFile` protocol validates the constructor signature at import time, but the per-platform dynamic import remains inherently fragile at module-load time (no way to statically verify all engines)
-- `_resolve_engine_for_studiolot()` uses `load_engine()` directly while standalone mode uses `load_engine_or_install()` — slight asymmetry; both could use engine_helpers
-- 2 pre-existing test failures: `test_missing_key_raises` (real `.env` bypasses env mock) and `test_custom_path_from_profile` (needs `/tmp/test_input` to exist on disk)
+- ~~`_resolve_engine_for_studiolot()` load_engine/load_engine_or_install asymmetry~~ Mostly resolved in Session 14 — both run modes now share `_load_engine_with_ctx()`; standalone first-run still uses `load_engine_or_install()` by design (install fallback + STANDBY seed belong to first run only).
+- ~~2 pre-existing test failures~~ Fixed in Session 14 — suite is fully green (62/62).
 - `PreflightExit` is now caught in `main()` but studiolot mode calls `_handle_preflight_checks()` without a dedicated try/except — relies on the outer `main()` handler; works but is implicit
 - `USER-FILES/02.STANDBY/` is empty after profile migration — needs `engine-replicate` repo to add `profiles/standby/` before FC standalone mode can seed profiles via `copy_standby_profiles()`
 

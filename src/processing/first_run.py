@@ -10,7 +10,12 @@ from typing import Any
 from loguru import logger
 
 from ..auth import get_api_key_interactive
-from ..engine_helpers import load_engine_or_install, print_engine_not_found
+from ..engine_helpers import (
+    load_engine_or_install,
+    make_engine_ctx,
+    print_engine_not_found,
+)
+from ..engine_loader import find_first_engine_dir
 
 
 def handle_first_run(
@@ -24,18 +29,7 @@ def handle_first_run(
     Returns (platform, api_key) on success, None on non-TTY
     failure (caller should exit).
     """
-    has_engine = False
-    for sp in search_paths:
-        try:
-            for entry in sp.iterdir():
-                if entry.is_dir() and entry.name.startswith("engine-"):
-                    has_engine = True
-                    platform = entry.name.removeprefix("engine-")
-                    break
-        except OSError:
-            continue
-        if has_engine:
-            break
+    platform, has_engine = _detect_engine_platform(search_paths, platform)
 
     api_key: str | None = None
     if not dry_run and not has_engine:
@@ -47,18 +41,23 @@ def handle_first_run(
             return None
 
     profile: dict[str, Any] = {"platform": platform}
-    engine_output_dir = Path("/tmp")
+    ctx = make_engine_ctx(platform, search_paths, profile, Path("/tmp"), api_key)
 
     try:
-        load_engine_or_install(
-            platform, search_paths, profile, engine_output_dir, api_key, auto_install
-        )
+        load_engine_or_install(ctx, auto_install)
     except FileNotFoundError:
         print_engine_not_found(platform)
         logger.info(
-            "Re-run with --install-default-engine=replicate "
-            "to auto-install the default Engine."
+            "Re-run with --install-default-engine=replicate " "to auto-install the default Engine."
         )
         return None
 
     return platform, api_key
+
+
+def _detect_engine_platform(search_paths: list[Path], fallback: str) -> tuple[str, bool]:
+    """Return (platform, has_engine) from the first engine-* dir found."""
+    found = find_first_engine_dir(search_paths)
+    if found is None:
+        return fallback, False
+    return found[1], True

@@ -3,3 +3,4 @@
 __version__ = "2.1.0"
 TIMESTAMP_FORMAT = "%y%m%d_%H%M%S"
 DEFAULT_PLATFORM = "replicate"
+MEDIA_TYPE = "IMG"

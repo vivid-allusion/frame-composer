@@ -9,9 +9,10 @@ import importlib
 import importlib.util
 import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .constants import DEFAULT_PLATFORM
 
@@ -31,6 +32,34 @@ class EngineLoadContext:
     on_progress: Callable[[str], None] | None = None
 
 
+def find_engine_dir(search_paths: list[Path], platform: str | None) -> Path:
+    """Return the first engine-<platform> directory found in search_paths.
+
+    Raises:
+        FileNotFoundError: No Engine directory found in search_paths.
+    """
+    resolved = platform or DEFAULT_PLATFORM
+    engine_dir_name = f"engine-{resolved}"
+    for sp in search_paths:
+        candidate = sp / engine_dir_name
+        if candidate.is_dir():
+            return candidate
+    searched = "\n  ".join(str(sp / engine_dir_name) for sp in search_paths)
+    raise FileNotFoundError(f"Engine '{resolved}' not found. Searched:\n  {searched}")
+
+
+def find_first_engine_dir(search_paths: list[Path]) -> tuple[Path, str] | None:
+    """Return (dir, platform) of the first engine-* directory, or None."""
+    for sp in search_paths:
+        try:
+            for entry in sp.iterdir():
+                if entry.is_dir() and entry.name.startswith("engine-"):
+                    return entry, entry.name.removeprefix("engine-")
+        except OSError:
+            continue
+    return None
+
+
 def load_engine(ctx: EngineLoadContext):
     """Find and load an Engine for the given platform.
 
@@ -46,41 +75,24 @@ def load_engine(ctx: EngineLoadContext):
         ImportError: Engine package exists but cannot be imported.
     """
     resolved = ctx.platform or DEFAULT_PLATFORM
-    engine_dir_name = f"engine-{resolved}"
+    engine_dir = find_engine_dir(ctx.search_paths, resolved)
+    pkg = _load_engine_package(engine_dir, resolved)
+    return pkg.Engine(
+        profile=ctx.profile,
+        output_dir=ctx.output_dir,
+        api_key=ctx.api_key,
+        on_progress=ctx.on_progress,
+    )
 
-    engine_dir = None
-    for sp in ctx.search_paths:
-        candidate = sp / engine_dir_name
-        if candidate.is_dir():
-            engine_dir = candidate
-            break
 
-    if engine_dir is None:
-        searched = "\n  ".join(
-            str(sp / engine_dir_name) for sp in ctx.search_paths
-        )
-        raise FileNotFoundError(
-            f"Engine '{resolved}' not found. Searched:\n  {searched}"
-        )
-
+def _load_engine_package(engine_dir: Path, platform: str):
+    """Import an engine package from engine_dir, falling back to pip site-packages."""
     root = str(engine_dir)
     if root not in sys.path:
         sys.path.insert(0, root)
 
-    pkg_name = f"engine_{resolved}"
-
-    spec = importlib.util.spec_from_file_location(
-        pkg_name, engine_dir / pkg_name / "__init__.py"
-    )
-    pkg = None
-    if spec is not None:
-        try:
-            pkg = importlib.util.module_from_spec(spec)
-            sys.modules[pkg_name] = pkg
-            spec.loader.exec_module(pkg)
-        except Exception:
-            pkg = None
-
+    pkg_name = f"engine_{platform}"
+    pkg = _exec_from_dir(engine_dir, pkg_name)
     if pkg is None:
         try:
             pkg = importlib.import_module(pkg_name)
@@ -90,22 +102,39 @@ def load_engine(ctx: EngineLoadContext):
                 f"cannot be imported. Check requirements: pip install -r "
                 f"{engine_dir / 'requirements.txt'}"
             ) from None
-
-    engine = pkg.Engine(
-        profile=ctx.profile,
-        output_dir=ctx.output_dir,
-        api_key=ctx.api_key,
-        on_progress=ctx.on_progress,
-    )
-    return engine
+    return pkg
 
 
-def copy_standby_profiles(platform: str, vehicle_root: Path | None = None) -> int:
+def _exec_from_dir(engine_dir: Path, pkg_name: str):
+    """Exec the package __init__.py from a local clone; None on failure."""
+    spec = importlib.util.spec_from_file_location(pkg_name, engine_dir / pkg_name / "__init__.py")
+    if spec is None:
+        return None
+    try:
+        pkg = importlib.util.module_from_spec(spec)
+        sys.modules[pkg_name] = pkg
+        spec.loader.exec_module(pkg)
+        return pkg
+    except Exception:
+        return None
+
+
+def copy_standby_profiles(
+    platform: str, vehicle_root: Path | None = None, media_type: str | None = None
+) -> int:
     """Copy standby YAML profiles from engine package to Vehicle's 02.STANDBY/.
+
+    The engine owns the STANDBY shelf: every load syncs the engine's
+    standby profiles over the shelf, filtered by the Vehicle's media type
+    (Frame Composer → IMG, Motion Conductor → VID). Users activate a
+    profile by copying it into 03.PROFILES/ — the shelf itself is not
+    user-edited.
 
     Args:
         platform: Engine platform name (e.g. 'replicate').
         vehicle_root: Vehicle project root.  Defaults to two levels above this file.
+        media_type: 'IMG' or 'VID' shelf to seed. None seeds everything
+            (engines without category shelves).
 
     Returns:
         Number of profile files copied.
@@ -120,7 +149,10 @@ def copy_standby_profiles(platform: str, vehicle_root: Path | None = None) -> in
 
     profile_files: list[Path] = []
     if hasattr(pkg, "list_standby_profiles"):
-        profile_files = pkg.list_standby_profiles()
+        try:
+            profile_files = pkg.list_standby_profiles(media_type)
+        except TypeError:
+            profile_files = pkg.list_standby_profiles()
     else:
         source = Path(pkg.__file__).parent / "profiles" / "standby"
         if source.is_dir():

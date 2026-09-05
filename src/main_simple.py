@@ -14,7 +14,6 @@ from loguru import logger
 from .auth import get_api_key, get_api_key_interactive
 from .cli import parse_args
 from .constants import DEFAULT_PLATFORM, __version__
-from .datatypes import MarkdownFile
 from .engine_helpers import (
     build_inputs,
     find_project_engines_dir,
@@ -25,8 +24,8 @@ from .exceptions import (
     AuthenticationError,
     ConfigurationError,
     PreflightExit,
-    ValidationError,
 )
+from .processing.context import PipelineContext
 from .processing.first_run import handle_first_run
 from .processing.markdown_parser import read_markdown_files
 from .processing.payload import compose_run_payloads, embed_payloads
@@ -35,9 +34,12 @@ from .processing.profiles import (
     load_profile_standalone,
     load_profile_studiolot,
 )
+from .processing.results import success_paths
 from .utils.logging import setup_logging, start_output_capture, write_run_logs
 from .utils.path_resolver import (
+    create_timestamped_output_path,
     resolve_input_path,
+    resolve_output_base_path,
 )
 
 # ── CLI / orchestration helpers ────────────────────────────────────────────────
@@ -51,9 +53,16 @@ def _apply_cli_overrides(profile: dict[str, Any], args: Any) -> dict[str, Any]:
     return {**profile, "parameters": params}
 
 
-def _handle_preflight_checks(
-    args: Any, md_files: list[MarkdownFile], profile: dict[str, Any]
-) -> None:
+def _prepare_profile(
+    profile: dict[str, Any], args: Any, default_platform: str = DEFAULT_PLATFORM
+) -> dict[str, Any]:
+    """Apply CLI overrides and resolve the active platform into the profile."""
+    prepared = _apply_cli_overrides(profile, args)
+    prepared["platform"] = args.platform or prepared.get("platform") or default_platform
+    return prepared
+
+
+def _handle_preflight_checks(args: Any, md_files: list[Any], profile: dict[str, Any]) -> None:
     if args.cost_estimation:
         total = len(md_files)
         cost = profile.get("pricing", {}).get("base_cost", 0.0)
@@ -81,18 +90,56 @@ def _report_results(results: list[Any], placeholders: int = 0) -> int:
     return 1 if failed else 0
 
 
-def _execute_pipeline(
-    md_files: list[MarkdownFile],
+def _execute_pipeline(ctx: PipelineContext) -> int:
+    """Run the core generation pipeline: build inputs → run → report → log."""
+    inputs = build_inputs(ctx.md_files, ctx.platform, ctx.input_root)
+    results = _run_with_progress(ctx.engine, inputs)
+
+    payloads = compose_run_payloads(ctx, results)
+    generated = success_paths(results)
+    placeholders = write_placeholders(
+        ctx,
+        results,
+        payloads=payloads if ctx.save_payloads else None,
+    )
+    exit_code = _report_results(results, len(placeholders))
+    write_run_logs(generated + placeholders, ctx.output_dir, ctx, payloads, results)
+    if ctx.save_payloads:
+        embed_payloads(results, payloads)
+    return exit_code
+
+
+def _make_pipeline_context(
+    md_files: list[Any],
     engine: Any,
     platform: str,
     profile: dict[str, Any],
     output_dir: Path,
-    input_root: Path | None = None,
-    save_payloads: bool = True,
-    run_mode: str = "standalone",
-    cli_args: dict[str, Any] | None = None,
-) -> int:
-    """Run the core generation pipeline: build inputs → run → report → log."""
+    input_root: Path,
+    args: Any,
+    run_mode: str,
+) -> PipelineContext:
+    """Bundle run state into the shared pipeline context."""
+    return PipelineContext(
+        md_files=md_files,
+        engine=engine,
+        platform=platform,
+        profile=profile,
+        output_dir=output_dir,
+        input_root=input_root,
+        save_payloads=args.save_payloads,
+        run_mode=run_mode,
+        cli_args=vars(args),
+    )
+
+
+def _run_with_progress(engine: Any, inputs: list[Any]) -> list[Any]:
+    """Run the engine under a live Progress display.
+
+    The display swaps the engine's private ``_on_progress`` callback for the
+    duration of the run (the de-facto Vehicle↔Engine progress contract) and
+    restores it afterwards.
+    """
     from rich.progress import (
         BarColumn,
         Progress,
@@ -102,9 +149,6 @@ def _execute_pipeline(
         TimeElapsedColumn,
     )
 
-    inputs = build_inputs(md_files, platform, input_root)
-    total = len(inputs)
-
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -112,7 +156,7 @@ def _execute_pipeline(
         TaskProgressColumn(),
         TimeElapsedColumn(),
     ) as bar:
-        task = bar.add_task("Processing...", total=total)
+        task = bar.add_task("Processing...", total=len(inputs))
 
         def on_progress(msg: Any) -> None:
             text = msg.message if hasattr(msg, "message") else str(msg)
@@ -124,51 +168,20 @@ def _execute_pipeline(
         original = engine._on_progress
         engine._on_progress = on_progress
         try:
-            results = engine.run(inputs)
+            return engine.run(inputs)
         finally:
             engine._on_progress = original
 
-    payloads = compose_run_payloads(results, md_files, profile, platform, engine, input_root)
-    generated = [r.path for r in results if r.status == "ok" and getattr(r, "path", None)]
-    placeholders = write_placeholders(
-        results,
-        md_files,
-        profile,
-        platform,
-        engine,
-        input_root,
-        save_payloads=save_payloads,
-        payloads=payloads if save_payloads else None,
-    )
-    exit_code = _report_results(results, len(placeholders))
-    failed = sum(1 for r in results if r.status == "error")
-    run_info = {
-        "run_mode": run_mode,
-        "platform": platform,
-        "engine_name": getattr(engine, "PROVIDER_NAME", platform),
-        "profile_path": profile.get("profile_path"),
-        "profile": profile,
-        "input_root": str(input_root) if input_root else None,
-        "output_dir": str(output_dir),
-        "cli_args": cli_args or {},
-        "counts": {
-            "inputs": len(md_files),
-            "generated": len(generated),
-            "failed": failed,
-            "placeholders": len(placeholders),
-        },
-    }
-    write_run_logs(
-        generated + placeholders,
-        output_dir,
-        run_info=run_info,
-        payloads=payloads,
-        results=results,
-        md_files=md_files,
-    )
-    if save_payloads:
-        embed_payloads(results, payloads)
-    return exit_code
+
+def _load_engine_with_ctx(
+    platform: str,
+    search_paths: list[Path],
+    profile: dict[str, Any],
+    output_dir: Path,
+    api_key: str | None,
+) -> Any:
+    """Build an EngineLoadContext and load the engine from search_paths."""
+    return load_engine(make_engine_ctx(platform, search_paths, profile, output_dir, api_key))
 
 
 def _resolve_engine_for_studiolot(
@@ -183,7 +196,7 @@ def _resolve_engine_for_studiolot(
             "Engine directory not found. Expected 00_APPLICATIONS/ENGINES/ "
             "under the project root."
         )
-    return load_engine(make_engine_ctx(platform, [project_engines], profile, output_dir, api_key))
+    return _load_engine_with_ctx(platform, [project_engines], profile, output_dir, api_key)
 
 
 # ── entry point ────────────────────────────────────────────────────────────────
@@ -209,7 +222,7 @@ def main() -> int:
         return 130
     except PreflightExit as e:
         return e.exit_code
-    except (AuthenticationError, ConfigurationError, ValidationError) as e:
+    except (AuthenticationError, ConfigurationError) as e:
         logger.error(f"Error: {e}")
         return 1
     except FileNotFoundError as e:
@@ -233,10 +246,8 @@ def _run_studiolot(args) -> int:
     if not profile_path:
         raise ConfigurationError("--profile is required in studiolot mode")
 
-    profile = load_profile_studiolot(profile_path)
-    profile = _apply_cli_overrides(profile, args)
-    platform = args.platform or profile.get("platform") or DEFAULT_PLATFORM
-    profile["platform"] = platform
+    profile = _prepare_profile(load_profile_studiolot(profile_path), args)
+    platform = profile["platform"]
 
     input_dir = Path(args.input_dir) if args.input_dir else Path(".")
 
@@ -249,15 +260,16 @@ def _run_studiolot(args) -> int:
     engine = _resolve_engine_for_studiolot(output_dir, platform, profile, api_key)
 
     return _execute_pipeline(
-        md_files,
-        engine,
-        platform,
-        profile,
-        output_dir,
-        input_root=input_dir,
-        save_payloads=args.save_payloads,
-        run_mode="studiolot",
-        cli_args=vars(args),
+        _make_pipeline_context(
+            md_files,
+            engine,
+            platform,
+            profile,
+            output_dir,
+            input_dir,
+            args,
+            run_mode="studiolot",
+        )
     )
 
 
@@ -276,21 +288,21 @@ def _run_standalone(args) -> int:
 
     try:
         profile = load_profile_standalone()
-        platform = profile.get("platform") or platform
     except ConfigurationError:
-        print(
+        sys.stderr.write(
             "\nThanks for supplying your API key. "
             "To make the script operational, pick a profile YAML\n"
             "from frame-composer/USER-FILES/02.STANDBY/ and copy it to\n"
             "frame-composer/USER-FILES/03.PROFILES/, then re-run.\n"
         )
-        return 0
+        return 1
 
-    profile = _apply_cli_overrides(profile, args)
+    profile = _prepare_profile(profile, args, default_platform=platform)
+    platform = profile["platform"]
 
     # ── check inputs before creating output dir ──────────────────────────────
 
-    input_path, _ = resolve_input_path(profile)
+    input_path = resolve_input_path(profile)
     md_files = read_markdown_files(input_path)
     _handle_preflight_checks(args, md_files, profile)
 
@@ -299,8 +311,6 @@ def _run_standalone(args) -> int:
         return 0
 
     # ── output directory (only created when generation is confirmed) ────────
-
-    from .utils.path_resolver import create_timestamped_output_path, resolve_output_base_path
 
     output_base = resolve_output_base_path(profile)
     output_dir = create_timestamped_output_path(output_base)
@@ -319,18 +329,19 @@ def _run_standalone(args) -> int:
 
     # ── engine with proper profile ───────────────────────────────────────────
 
-    engine = load_engine(make_engine_ctx(platform, search_paths, profile, output_dir, api_key))
+    engine = _load_engine_with_ctx(platform, search_paths, profile, output_dir, api_key)
 
     return _execute_pipeline(
-        md_files,
-        engine,
-        platform,
-        profile,
-        output_dir,
-        input_root=input_path,
-        save_payloads=args.save_payloads,
-        run_mode="standalone",
-        cli_args=vars(args),
+        _make_pipeline_context(
+            md_files,
+            engine,
+            platform,
+            profile,
+            output_dir,
+            input_path,
+            args,
+            run_mode="standalone",
+        )
     )
 
 

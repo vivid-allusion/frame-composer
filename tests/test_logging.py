@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from src.main_simple import _execute_pipeline
+from src.processing.context import PipelineContext
 from src.processing.payload import read_payload
 from src.utils import logging as capture_mod
 from src.utils.logging import (
@@ -177,17 +178,18 @@ def _run_pipeline(
         md_files = [_md("in/a.md", "fail request")]
     engine = StubEngine(tmp_path)
     start_output_capture()
-    exit_code = _execute_pipeline(
-        md_files,
-        engine,
-        "replicate",
-        _profile(),
-        tmp_path,
+    ctx = PipelineContext(
+        md_files=md_files,
+        engine=engine,
+        platform="replicate",
+        profile=_profile(),
+        output_dir=tmp_path,
         input_root=Path("in"),
         save_payloads=save_payloads,
         run_mode="studiolot",
         cli_args={"dry_run": False},
     )
+    exit_code = _execute_pipeline(ctx)
     assert exit_code == 1
     return {p.name: p.read_text() for p in tmp_path.glob("*.log")}
 
@@ -281,33 +283,26 @@ class TestFallbackWriter:
     def test_write_run_logs_with_empty_paths(self, tmp_path: Path):
         start_output_capture()
         sys.stderr.write("nothing to do\n")
-        run_info = {
-            "run_mode": "standalone",
-            "platform": "replicate",
-            "engine_name": "Stub",
-            "profile_path": "/profiles/test.yaml",
-            "profile": _profile(),
-            "input_root": "in",
-            "output_dir": str(tmp_path),
-            "cli_args": {},
-            "counts": {"inputs": 1, "generated": 0, "failed": 1, "placeholders": 0},
-        }
         results = [
             SimpleNamespace(
                 status="error",
                 source_path=Path("in/a.md"),
                 path=None,
                 error_msg="Prediction failed (E006)",
+                expected_path=None,
             )
         ]
-        written = write_run_logs(
-            [],
-            tmp_path,
-            run_info=run_info,
-            payloads={},
-            results=results,
+        ctx = PipelineContext(
             md_files=[_md("in/a.md", "x")],
+            engine=StubEngine(tmp_path),
+            platform="replicate",
+            profile=_profile(),
+            output_dir=tmp_path,
+            input_root=Path("in"),
+            run_mode="standalone",
+            cli_args={},
         )
+        written = write_run_logs([], tmp_path, ctx, {}, results)
         assert len(written) == 1
         text = written[0].read_text()
         assert "=== Payload ===" not in text

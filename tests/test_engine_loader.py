@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from src.engine_helpers import _relative_dir
 from src.engine_loader import EngineLoadContext, load_engine
 

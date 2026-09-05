@@ -43,9 +43,9 @@ class TestExtractAllImageUrls:
         urls = extract_all_image_urls(content)
         assert urls == ["https://a.com/1.jpg", "https://b.com/2.png"]
 
-    def test_no_urls_raises(self):
-        with pytest.raises(ValueError, match="No image URLs"):
-            extract_all_image_urls("Just a prompt\nNothing else")
+    def test_no_urls_returns_empty_list(self):
+        urls = extract_all_image_urls("Just a prompt\nNothing else")
+        assert urls == []
 
 
 class TestReadMarkdownFiles:
