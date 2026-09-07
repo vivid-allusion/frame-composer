@@ -159,11 +159,13 @@ def _run_with_progress(engine: Any, inputs: list[Any]) -> list[Any]:
         task = bar.add_task("Processing...", total=len(inputs))
 
         def on_progress(msg: Any) -> None:
-            text = msg.message if hasattr(msg, "message") else str(msg)
-            bar.update(task, description=text)
             current = getattr(msg, "current", 0)
+            done = int(bar.task.completed)
             if current:
                 bar.update(task, completed=current)
+            idx = min(done, len(inputs) - 1)
+            filename = inputs[idx].path.name
+            bar.update(task, description=filename)
 
         original = engine._on_progress
         engine._on_progress = on_progress
