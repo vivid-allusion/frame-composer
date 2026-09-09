@@ -160,9 +160,9 @@ def _run_with_progress(engine: Any, inputs: list[Any]) -> list[Any]:
 
         def on_progress(msg: Any) -> None:
             current = getattr(msg, "current", 0)
-            done = int(bar.task.completed)
             if current:
                 bar.update(task, completed=current)
+            done = int(bar.tasks[0].completed)
             idx = min(done, len(inputs) - 1)
             filename = inputs[idx].path.name
             bar.update(task, description=filename)
