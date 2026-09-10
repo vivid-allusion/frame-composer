@@ -132,16 +132,12 @@ def _print_manual_install(platform: str, lead: str = "Engine required.") -> None
 
 
 def _offer_engine_install(platform: str) -> None:
-    """Check if engine package is installed; offer to install if missing."""
+    """Check if engine package is installed; install it if missing."""
     spec = importlib.util.find_spec(f"engine_{platform}")
     if spec is not None:
         return
 
-    print(f"\nEngine '{platform}' is not installed.")
-    choice = input("Install now? [Y/n]: ").strip().lower()
-    if choice and choice != "y":
-        _print_manual_install(platform)
-        sys.exit(1)
+    print(f"\nEngine '{platform}' is not installed. Installing now...")
 
     from ..engine_helpers import auto_install_engine
 

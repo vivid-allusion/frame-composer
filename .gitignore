@@ -31,8 +31,13 @@ Thumbs.db
 .pytest_cache/
 # User data folders — track structure, ignore content
 # User data folders — track structure, ignore content
+# Engine-owned standby profiles — seeded by copy_standby_profiles() on engine load
+USER-FILES/02.STANDBY/*
+!USER-FILES/02.STANDBY/.gitkeep
 USER-FILES/04.INPUT/*
 !USER-FILES/04.INPUT/.gitkeep
+USER-FILES/03.PROFILES/*
+!USER-FILES/03.PROFILES/.gitkeep
 USER-FILES/05.OUTPUT/*
 !USER-FILES/05.OUTPUT/.gitkeep
 USER-FILES/06.DONE/*
@@ -42,3 +47,6 @@ USER-FILES/07.TEMP/*
 
 # Auth
 auth_*.yaml
+
+# Engines (cloned at runtime, owned by separate repos)
+ENGINES/
