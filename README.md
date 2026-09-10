@@ -52,7 +52,7 @@ python3 run.py --profile P.yaml --input_dir DIR --output_dir DIR  # studiolot mo
 python3 run.py --platform fal     # override the profile's platform
 ```
 
-First run: the engine is checked, the interactive wizard offers engine install + API key setup (saved to `.env`), and standby profiles are seeded into `02.STANDBY/`.
+First run: the engine is checked, the interactive wizard installs the missing Engine automatically (no confirmation prompt), then sets the API key (saved to `.env`), and standby profiles are seeded into `02.STANDBY/`.
 
 ## Profile YAML
 
@@ -110,7 +110,7 @@ Four-tier resolution per platform (`REPLICATE_API_TOKEN`, `FAL_KEY`, `OPENROUTER
 1. Environment variable
 2. `pass show studiolot/<key>` (GPG store, optional)
 3. `.env` file in the project root
-4. Interactive wizard (TTY only) — prompts for platform, offers engine install, saves the key to `.env`
+4. Interactive wizard (TTY only) — prompts for platform, installs the missing Engine automatically, saves the key to `.env`
 
 ## Dependencies
 
