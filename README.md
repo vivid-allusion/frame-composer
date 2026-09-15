@@ -121,3 +121,7 @@ Four-tier resolution per platform (`REPLICATE_API_TOKEN`, `FAL_KEY`, `OPENROUTER
 - Never modifies files in `USER-FILES/` without explicit permission
 - `04.INPUT/` is read-only; outputs go only to `05.OUTPUT/`
 - No automatic archiving or cleanup of user files
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) to get involved, and [`ARCHITECTURE.md`](ARCHITECTURE.md) for how the projects fit together.
