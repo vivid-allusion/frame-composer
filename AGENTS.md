@@ -70,7 +70,9 @@ The Frame Composer (Vehicle) delegates all API/provider logic to Engine plugins.
 "The Vehicle orchestrates. The Engine executes. The profile configures."
 
 ### Engine Loading
-- `src/engine_loader.py` — canonical `load_engine()` implementation
+- `src/engine_loader.py` — vendored byte-identical snapshot of studiolot's
+  `pipeline/engine_loader.py` (**canonical home** — change there first, then
+  re-vendor; verify with a three-way diff against MC)
 - Uses `EngineLoadContext` dataclass (single param: `load_engine(ctx)`)
 - Searches `search_paths` for `engine-<platform>/` directories
 - Local clones take precedence over pip-installed packages (VEHICLE_CONTRACT §2b)
@@ -120,7 +122,7 @@ main() → _run_studiolot()
 | `run.py` | Bootstrap: venv management, dependency install, launches `src/main_simple.py` with TTY passthrough |
 | `src/main_simple.py` | Entry point, CLI routing, both run modes, engine pre-check, interactive wizard fallback |
 | `src/cli.py` | argparse definition (declarative `_ARGUMENTS` list) |
-| `src/engine_loader.py` | Canonical `load_engine()` + `EngineLoadContext` dataclass + `copy_standby_profiles()` |
+| `src/engine_loader.py` | Vendored snapshot of studiolot's `pipeline/engine_loader.py` (canonical) — `load_engine(ctx)` + `EngineLoadContext` + `copy_standby_profiles()` |
 | `src/engine_helpers.py` | Engine discovery, installation, input construction (`build_inputs()` passes `relative_dir` metadata, `_relative_dir()`), loading, `print_engine_not_found()` (lists all platforms) |
 | `src/engine_contract.py` | `EngineInputFile` protocol — shared contract for Engine.InputFile (requires `path`, `prompt`, `reference_urls`, `metadata`) |
 | `src/processing/markdown_parser.py` | `parse_markdown()`, `extract_prompt_text()`, `extract_all_image_urls()`, `read_markdown_files()` — prompted + URL parsing + directory batch reader |
