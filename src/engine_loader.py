@@ -1,8 +1,9 @@
 """Canonical Engine discovery and loading.
 
-Per ENGINE_CONTRACT.md §7a: this is the single canonical implementation of
-load_engine(). Vehicle repos vendor a snapshot copy — update here first,
-then re-vendor.
+Per ENGINE_CONTRACT.md §6/§7a: this is the single canonical implementation of
+load_engine(), maintained in studiolot/pipeline/engine_loader.py. Vehicle
+repos (frame-composer, motion-conductor) vendor a byte-identical snapshot —
+change canonical first, then re-vendor (verify with a three-way diff).
 """
 
 import importlib
