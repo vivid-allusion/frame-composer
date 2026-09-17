@@ -167,6 +167,7 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
     """Read .md files from input_dir, extract prompt + reference URLs."""
     md_files = sorted(input_dir.rglob("*.md"), key=_natural_sort_key)
     result: list[MarkdownFile] = []
+    rejected = 0
     for md_path in md_files:
         content = md_path.read_text(encoding="utf-8")
         prompt = ""
@@ -182,14 +183,19 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
         if urls:
             valid, invalid = validate_image_urls(urls)
             if invalid:
-                for url in invalid:
-                    logger.warning(f"Unreachable image URL in {md_path.name}: {url}")
-            urls = valid
-            if not urls and (valid or invalid):
-                logger.warning(
-                    f"No reachable image URLs in {md_path.name} " f"— treating as text-to-image"
+                # Fail loud: a bullet that declared media references with
+                # unreachable URLs is rejected, never silently downgraded to
+                # text-to-image (that changed the author's intent). Parity
+                # with motion-conductor's bullet_parser, which rejects too.
+                logger.error(
+                    f"Rejected {md_path.name}: {len(invalid)} of {len(urls)} "
+                    "media URL(s) unreachable"
                 )
+                rejected += 1
+                continue
         result.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
+    if rejected and not result:
+        logger.error(f"All {rejected} bullet(s) rejected — nothing to generate")
     if not result:
         logger.warning(f"No .md files found in {input_dir}")
         return result

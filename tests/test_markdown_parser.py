@@ -89,3 +89,52 @@ class TestReadMarkdownFiles:
             "10_rw.md",
             "100_rw.md",
         ]
+
+
+class TestReadMarkdownFilesValidation:
+    """Fail-loud contract: bullets with unreachable media URLs are rejected."""
+
+    def test_pure_text_bullet_needs_no_validation(self, tmp_path, monkeypatch):
+        (tmp_path / "t2i.md").write_text("a sunset over the bay\n", encoding="utf-8")
+        called = []
+        monkeypatch.setattr(
+            "src.processing.markdown_parser.validate_image_urls",
+            lambda urls, timeout=5.0, workers=8: called.append(urls) or ([], []),
+        )
+        files = read_markdown_files(tmp_path)
+        assert len(files) == 1
+        assert files[0]["reference_urls"] == []
+        assert called == []  # no URLs -> no reachability checks
+
+    def test_all_urls_unreachable_rejects_bullet(self, tmp_path, monkeypatch):
+        (tmp_path / "dead.md").write_text(
+            "prompt\n![x](https://dead.example/1.jpg)\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            "src.processing.markdown_parser.validate_image_urls",
+            lambda urls, timeout=5.0, workers=8: ([], list(urls)),
+        )
+        assert read_markdown_files(tmp_path) == []
+
+    def test_partial_unreachable_rejects_bullet(self, tmp_path, monkeypatch):
+        (tmp_path / "half.md").write_text(
+            "prompt\n![a](https://ok.example/1.jpg)\n![b](https://dead.example/2.jpg)\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            "src.processing.markdown_parser.validate_image_urls",
+            lambda urls, timeout=5.0, workers=8: ([urls[0]], [urls[1]]),
+        )
+        assert read_markdown_files(tmp_path) == []
+
+    def test_all_urls_reachable_keeps_bullet(self, tmp_path, monkeypatch):
+        (tmp_path / "ok.md").write_text(
+            "prompt\n![a](https://ok.example/1.jpg)\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            "src.processing.markdown_parser.validate_image_urls",
+            lambda urls, timeout=5.0, workers=8: (list(urls), []),
+        )
+        files = read_markdown_files(tmp_path)
+        assert len(files) == 1
+        assert files[0]["reference_urls"] == ["https://ok.example/1.jpg"]
