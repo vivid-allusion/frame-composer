@@ -6,6 +6,7 @@ from src.processing.markdown_parser import (
     extract_all_image_urls,
     extract_prompt_text,
     read_markdown_files,
+    validate_image_urls,
 )
 
 
@@ -70,11 +71,60 @@ class TestExtractAllImageUrls:
         urls = extract_all_image_urls(content)
         assert urls == ["https://example.com/2.jpg"]
 
+    def test_url_with_brackets_in_path(self):
+        content = (
+            "Prompt\n"
+            "![img](https://host/FS_Ferenc_Sz%C3%A1lasi/Ferenc_Sz%C3%A1lasi_(3x4_cropped).png)\n"
+            "![img](https://host/FS_Ferenc_Sz%C3%A1lasi/images_(1).png)\n"
+        )
+        assert extract_all_image_urls(content) == [
+            "https://host/FS_Ferenc_Sz%C3%A1lasi/Ferenc_Sz%C3%A1lasi_(3x4_cropped).png",
+            "https://host/FS_Ferenc_Sz%C3%A1lasi/images_(1).png",
+        ]
+
+    def test_non_ascii_url_is_percent_encoded(self):
+        content = "Prompt\n![img](https://host/FS_Ferenc_Szálasi/i.png)"
+        assert extract_all_image_urls(content) == [
+            "https://host/FS_Ferenc_Sz%C3%A1lasi/i.png"
+        ]
+
+    def test_already_encoded_url_is_unchanged(self):
+        url = "https://host/FS_Ferenc_Sz%C3%A1lasi/images_(3).png"
+        assert extract_all_image_urls(f"Prompt\n![img]({url})") == [url]
+
 
 class TestExtractPromptTextWithComments:
     def test_commented_first_line_becomes_empty(self):
         content = "<!-- Old prompt -->\nNew prompt\n![x](https://a.com/1.jpg)"
         assert extract_prompt_text(content) == "New prompt"
+
+
+class TestValidateImageUrls:
+    def test_non_ascii_url_is_encoded_before_request(self, monkeypatch):
+        seen = {}
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(req, timeout=None):
+            seen["url"] = req.full_url
+            return FakeResponse()
+
+        monkeypatch.setattr(
+            "src.processing.markdown_parser.urllib.request.urlopen", fake_urlopen
+        )
+        raw = "https://host/FS_Ferenc_Szálasi/i.png"
+        valid, invalid = validate_image_urls([raw])
+
+        assert valid == [raw]
+        assert invalid == []
+        assert seen["url"] == "https://host/FS_Ferenc_Sz%C3%A1lasi/i.png"
 
 
 class TestReadMarkdownFiles:

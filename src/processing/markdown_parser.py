@@ -14,6 +14,7 @@ PRD Reference: Section 05.1, 06.2
 
 import re
 import sys
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -23,7 +24,12 @@ from loguru import logger
 
 from ..datatypes import MarkdownFile
 
-_IMG_URL_PATTERN = re.compile(r"!\[.*?\]\((https?://[^\)]+)\)")
+# A URL path can itself contain brackets (…_(3x4_cropped).png), so the URL body
+# allows balanced "(…)" groups instead of stopping at the first ")".
+_URL_BODY = r"[^\s()]*(?:\([^\s()]*\)[^\s()]*)*"
+# Never encode these: % keeps already-encoded URLs stable, brackets are legal in a path.
+_URL_SAFE = ":/?#[]@!$&'()*+,;=%~"
+_IMG_URL_PATTERN = re.compile(rf"!\[.*?\]\((https?://{_URL_BODY})\)")
 _LINK_WITHOUT_BANG = re.compile(r"(?<!!)\[.*?\]\((https?://[^\)]+)\)")
 _BANG_SPACE_PATTERN = re.compile(r"! +\[.*?\]\(.*?\)")
 _PAREN_SPACE_PATTERN = re.compile(r"!\[.*?\] +\(.*?\)")
@@ -66,6 +72,16 @@ def _check_line(line: str, lineno: int, warn: Callable[[str], None] | None) -> N
         )
 
 
+def _normalize_url(url: str) -> str:
+    """Percent-encode characters that are illegal in a URL (spaces, non-ASCII).
+
+    Idempotent: an already-encoded URL (e.g. ``%C3%A1``) is returned unchanged.
+    Brackets stay literal — they are legal in a path and the image hosts serve
+    them either way.
+    """
+    return urllib.parse.quote(url, safe=_URL_SAFE)
+
+
 def parse_markdown(
     markdown_content: str, warn: Callable[[str], None] | None = None
 ) -> tuple[str, list[str]]:
@@ -99,9 +115,9 @@ def parse_markdown(
 
         match = _IMG_URL_PATTERN.search(line)
         if match:
-            urls.append(match.group(1))
+            urls.append(_normalize_url(match.group(1)))
         elif stripped.startswith("http://") or stripped.startswith("https://"):
-            urls.append(stripped)
+            urls.append(_normalize_url(stripped))
         else:
             _check_line(line, lineno, warn)
 
@@ -151,10 +167,13 @@ def validate_image_urls(
 def _check_url(url: str, headers: dict[str, str], timeout: float) -> bool:
     """Return True when url answers a HEAD request below 400."""
     try:
-        req = urllib.request.Request(url, method="HEAD", headers=headers)
+        req = urllib.request.Request(
+            _normalize_url(url), method="HEAD", headers=headers
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status < 400
-    except Exception:
+    except Exception as e:
+        logger.debug(f"URL check failed for {url}: {type(e).__name__}: {e}")
         return False
 
 
