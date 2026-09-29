@@ -13,7 +13,7 @@ studiolot (TUI)  →  Vehicle (script)  →  Engine (SDK wrapper)  →  Provider
 
 - **studiolot** — Textual TUI dashboard. Lists Applications, manages projects,
   drives Generate/Sync. Keyboard-driven (lazygit style).
-- **Vehicle** — an SDK-agnostic generation script. Reads bullet `.md` files,
+- **Vehicle** — an SDK-agnostic generation script. Reads Markdown `.md` files,
   discovers an Engine via `engine_loader.py`, calls `engine.run(inputs)`,
   writes output. Accepts `--input_dir`, `--output_dir`, `--profile` CLI flags.
   Examples: `frame-composer` (image), `motion-conductor` (video).
@@ -37,7 +37,7 @@ User presses g in TUI
   → Vehicle starts, reads profile, sees platform: replicate
   → Vehicle walks up filesystem looking for 00_APPLICATIONS/ENGINES/engine-replicate/
   → engine_loader.py imports Engine from engine_replicate package
-  → Vehicle reads bullet .md files → builds InputFile objects
+  → Vehicle reads Markdown .md files → builds InputFile objects
   → engine.run(inputs) → calls replicate SDK → saves output
   → stdout streams to TUI Generations panel
 ```
@@ -72,7 +72,7 @@ Update canonical first, then re-vendor into both Vehicles.
 
 | Doc | What it covers |
 |-----|---------------|
-| `docs/architecture/PHILOSOPHY.md` | Why the project is shaped this way. Bullet format, sidecar, folder model, copy-forward flow. |
+| `docs/architecture/PHILOSOPHY.md` | Why the project is shaped this way. Markdown-file format, sidecar, folder model, copy-forward flow. |
 | `docs/architecture/DASH_CONTRACT.md` | Panel responsibilities, execution paths, keybindings, non-negotiable rules. |
 | `docs/architecture/ENGINE_CONTRACT.md` | Engine interface, datatypes, repo structure, profile schema, discovery protocol. |
 | `docs/architecture/VEHICLE_CONTRACT.md` | Vehicle CLI contract, engine discovery, standalone UX, FC/MC specifics. |
@@ -82,12 +82,12 @@ Update canonical first, then re-vendor into both Vehicles.
 | Term | Means |
 |------|-------|
 | **Application** | One row in the TUI's APPLICATIONS panel. One Vehicle + one Engine + one profile. |
-| **Bullet** | A `.md` file. Line 1 = prompt, line 2+ = `!(b2-url)`. The universal payload. |
-| **Sidecar** | A stem-matched `.md` beside every media file with its B2 URL. The sidecar IS the bullet-in-waiting. |
+| **Markdown file** | A `.md` file. Line 1 = prompt, line 2+ = `!(b2-url)`. The universal payload. |
+| **Sidecar** | A stem-matched `.md` beside every media file with its B2 URL. The sidecar IS the next Markdown file. |
 | **Keeper** | A generated result copied to `06_KEEPERS/`. Ammo for the next pipeline stage. |
 | **Profile** | A YAML file containing platform, endpoint, parameters, prefix/suffix. The profile IS the action. |
 | **Endpoint TOML** | A `.toml` file in an Engine's `endpoints/` dir. Defines valid parameter ranges for one model. |
-| **Dry-Run** | Generates the would-be command + lists bullets, but does not execute. No API call. |
+| **Dry-Run** | Generates the would-be command + lists Markdown files, but does not execute. No API call. |
 
 ## Design constraints
 

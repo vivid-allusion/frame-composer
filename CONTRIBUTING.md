@@ -121,7 +121,7 @@ Open a GitHub issue with:
 3. **What happened** — error messages, unexpected behaviour, screenshots.
 4. **Environment** — OS, Python version, terminal emulator.
 
-For generation bugs, include the bullet content, the error shown, and the model
+For generation bugs, include the Markdown file content, the error shown, and the model
 and endpoint used. For TUI bugs, a terminal recording helps a lot.
 
 ## License

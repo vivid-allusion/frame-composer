@@ -202,10 +202,10 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
         if urls:
             valid, invalid = validate_image_urls(urls)
             if invalid:
-                # Fail loud: a bullet that declared media references with
+                # Fail loud: a Markdown file that declared media references with
                 # unreachable URLs is rejected, never silently downgraded to
                 # text-to-image (that changed the author's intent). Parity
-                # with motion-conductor's bullet_parser, which rejects too.
+                # with motion-conductor's markdown_parser, which rejects too.
                 logger.error(
                     f"Rejected {md_path.name}: {len(invalid)} of {len(urls)} "
                     "media URL(s) unreachable"
@@ -214,7 +214,7 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
                 continue
         result.append({"path": md_path, "prompt": prompt, "reference_urls": urls})
     if rejected and not result:
-        logger.error(f"All {rejected} bullet(s) rejected — nothing to generate")
+        logger.error(f"All {rejected} Markdown file(s) rejected — nothing to generate")
     if not result:
         logger.warning(f"No .md files found in {input_dir}")
         return result

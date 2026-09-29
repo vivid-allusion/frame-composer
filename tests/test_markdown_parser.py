@@ -142,9 +142,9 @@ class TestReadMarkdownFiles:
 
 
 class TestReadMarkdownFilesValidation:
-    """Fail-loud contract: bullets with unreachable media URLs are rejected."""
+    """Fail-loud contract: Markdown files with unreachable media URLs are rejected."""
 
-    def test_pure_text_bullet_needs_no_validation(self, tmp_path, monkeypatch):
+    def test_pure_text_markdown_needs_no_validation(self, tmp_path, monkeypatch):
         (tmp_path / "t2i.md").write_text("a sunset over the bay\n", encoding="utf-8")
         called = []
         monkeypatch.setattr(
@@ -156,7 +156,7 @@ class TestReadMarkdownFilesValidation:
         assert files[0]["reference_urls"] == []
         assert called == []  # no URLs -> no reachability checks
 
-    def test_all_urls_unreachable_rejects_bullet(self, tmp_path, monkeypatch):
+    def test_all_urls_unreachable_rejects_markdown(self, tmp_path, monkeypatch):
         (tmp_path / "dead.md").write_text(
             "prompt\n![x](https://dead.example/1.jpg)\n", encoding="utf-8"
         )
@@ -166,7 +166,7 @@ class TestReadMarkdownFilesValidation:
         )
         assert read_markdown_files(tmp_path) == []
 
-    def test_partial_unreachable_rejects_bullet(self, tmp_path, monkeypatch):
+    def test_partial_unreachable_rejects_markdown(self, tmp_path, monkeypatch):
         (tmp_path / "half.md").write_text(
             "prompt\n![a](https://ok.example/1.jpg)\n![b](https://dead.example/2.jpg)\n",
             encoding="utf-8",
@@ -177,7 +177,7 @@ class TestReadMarkdownFilesValidation:
         )
         assert read_markdown_files(tmp_path) == []
 
-    def test_all_urls_reachable_keeps_bullet(self, tmp_path, monkeypatch):
+    def test_all_urls_reachable_keeps_markdown(self, tmp_path, monkeypatch):
         (tmp_path / "ok.md").write_text(
             "prompt\n![a](https://ok.example/1.jpg)\n", encoding="utf-8"
         )

@@ -42,9 +42,9 @@ Local machine ──▶ B2 bucket ──▶ AI APIs
 
 ## The data model
 
-### Bullets
+### Markdown files
 
-A job is a markdown file called a **bullet**. One format everywhere:
+A job is a Markdown file. One format everywhere:
 
 ```
 Line 1:  the prompt
@@ -53,15 +53,15 @@ Line 2+: ![](url-to-an-image-or-video)
 [optional] ![slot](url)     # alt text names a payload slot
 ```
 
-The media type follows the URL — an `.mp4`/`.mov` URL makes the bullet video.
+The media type follows the URL — an `.mp4`/`.mov` URL makes the Markdown file video.
 That is why a video model can be used from the same input format with no
 special casing.
 
 ### The sidecar
 
 Every generated image or video gets a matching `.md` sidecar holding its public
-URL. The sidecar *is* the next bullet — syncing creates bullets, so there is no
-separate "make a bullet" step.
+URL. The sidecar *is* the next Markdown file — syncing creates Markdown files, so there is no
+separate "make a Markdown file" step.
 
 ### Copy forward, keep everything
 
