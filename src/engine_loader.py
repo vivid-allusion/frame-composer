@@ -1,9 +1,14 @@
-"""Canonical Engine discovery and loading.
+"""Canonical Engine discovery and loading — vendored from studiolot.
 
-Per ENGINE_CONTRACT.md §6/§7a: this is the single canonical implementation of
-load_engine(), maintained in studiolot/pipeline/engine_loader.py. Vehicle
-repos (frame-composer, motion-conductor) vendor a byte-identical snapshot —
-change canonical first, then re-vendor (verify with a three-way diff).
+Per ENGINE_CONTRACT.md §6/§7a: the canonical implementation of load_engine()
+lives in ~/MISC/studiolot/aisl/engines.py. This file is the Vehicle's
+byte-identical snapshot of that module's *loader half* — change the canonical
+first, then re-vendor (verify with a three-way diff).
+
+accepted divergence (W5 M5): aisl/engines.py is a facet — it also imports
+aisl.engine_registry and aisl.surface and exports `engines_list` / `OPS`, which
+do not exist in a Vehicle. Only the loader functions below are vendored; this
+Vehicle's copy stays byte-identical to the other Vehicle's.
 """
 
 import importlib
@@ -39,8 +44,7 @@ def _ensure_engine_dependencies(engine_dir: Path) -> None:
     except subprocess.CalledProcessError as e:
         stderr = e.stderr.decode() if e.stderr else ""
         raise ImportError(
-            f"Engine dependencies at {req} failed to install. "
-            f"pip stderr: {stderr}"
+            f"Engine dependencies at {req} failed to install. pip stderr: {stderr}"
         ) from e
 
 
@@ -135,7 +139,9 @@ def _load_engine_package(engine_dir: Path, platform: str):
 
 def _exec_from_dir(engine_dir: Path, pkg_name: str):
     """Exec the package __init__.py from a local clone; None on failure."""
-    spec = importlib.util.spec_from_file_location(pkg_name, engine_dir / pkg_name / "__init__.py")
+    spec = importlib.util.spec_from_file_location(
+        pkg_name, engine_dir / pkg_name / "__init__.py"
+    )
     if spec is None:
         return None
     try:
