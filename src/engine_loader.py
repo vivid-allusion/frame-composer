@@ -1,14 +1,14 @@
 """Canonical Engine discovery and loading — vendored from studiolot.
 
 Per ENGINE_CONTRACT.md §6/§7a: the canonical implementation of load_engine()
-lives in ~/MISC/studiolot/aisl/engines.py. This file is the Vehicle's
+lives in ~/MISC/studiolot/aisl/engines.py. This file is the Generator's
 byte-identical snapshot of that module's *loader half* — change the canonical
 first, then re-vendor (verify with a three-way diff).
 
 accepted divergence (W5 M5): aisl/engines.py is a facet — it also imports
 aisl.engine_registry and aisl.surface and exports `engines_list` / `OPS`, which
-do not exist in a Vehicle. Only the loader functions below are vendored; this
-Vehicle's copy stays byte-identical to the other Vehicle's.
+do not exist in a Generator. Only the loader functions below are vendored; this
+Generator's copy stays byte-identical to the other Generator's.
 """
 
 import importlib
@@ -29,7 +29,7 @@ def _ensure_engine_dependencies(engine_dir: Path) -> None:
 
     Idempotent: pip install -r is a no-op when everything is already
     satisfied. Called before importing the engine package so that a
-    vehicle-created venv (which only has vehicle deps) gets the engine
+    generator-created venv (which only has generator deps) gets the engine
     SDK automatically.
     """
     req = engine_dir / "requirements.txt"
@@ -154,27 +154,27 @@ def _exec_from_dir(engine_dir: Path, pkg_name: str):
 
 
 def copy_standby_profiles(
-    platform: str, vehicle_root: Path | None = None, media_type: str | None = None
+    platform: str, generator_root: Path | None = None, media_type: str | None = None
 ) -> int:
-    """Copy standby YAML profiles from engine package to Vehicle's 02.STANDBY/.
+    """Copy standby YAML profiles from engine package to Generator's 02.STANDBY/.
 
     The engine owns the STANDBY shelf: every load syncs the engine's
-    standby profiles over the shelf, filtered by the Vehicle's media type
+    standby profiles over the shelf, filtered by the Generator's media type
     (Frame Composer → IMG, Motion Conductor → VID). Users activate a
     profile by copying it into 03.PROFILES/ — the shelf itself is not
     user-edited.
 
     Args:
         platform: Engine platform name (e.g. 'replicate').
-        vehicle_root: Vehicle project root.  Defaults to two levels above this file.
+        generator_root: Generator project root.  Defaults to two levels above this file.
         media_type: 'IMG' or 'VID' shelf to seed. None seeds everything
             (engines without category shelves).
 
     Returns:
         Number of profile files copied.
     """
-    if vehicle_root is None:
-        vehicle_root = Path(__file__).resolve().parent.parent
+    if generator_root is None:
+        generator_root = Path(__file__).resolve().parent.parent
 
     try:
         pkg = importlib.import_module(f"engine_{platform}")
@@ -195,7 +195,7 @@ def copy_standby_profiles(
     if not profile_files:
         return 0
 
-    dest = vehicle_root / "USER-FILES" / "02.STANDBY"
+    dest = generator_root / "USER-FILES" / "02.STANDBY"
     dest.mkdir(parents=True, exist_ok=True)
 
     count = 0
