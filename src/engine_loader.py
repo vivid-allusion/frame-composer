@@ -160,7 +160,7 @@ def copy_standby_profiles(
 
     The engine owns the STANDBY shelf: every load syncs the engine's
     standby profiles over the shelf, filtered by the Generator's media type
-    (Frame Composer → IMG, Motion Conductor → VID). Users activate a
+    (Image Generator → IMG, Video Generator → VID). Users activate a
     profile by copying it into 03.PROFILES/ — the shelf itself is not
     user-edited.
 
