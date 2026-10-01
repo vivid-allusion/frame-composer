@@ -174,7 +174,7 @@ def write_run_logs(
         written.append(log_path)
     if not written:
         ts = datetime.now().strftime(TIMESTAMP_FORMAT)
-        log_path = output_dir / f"frame_composer_{ts}.log"
+        log_path = output_dir / f"image_generator_{ts}.log"
         log_path.write_text(_log_text(header, None, capture, summary))
         written.append(log_path)
     return written
@@ -210,8 +210,8 @@ def _build_header(ctx: PipelineContext, results: list[Any], total_paths: int) ->
         "placeholders": max(0, total_paths - generated),
     }
     lines = [
-        "=== Frame Composer run log ===",
-        f"vehicle: frame-composer v{__version__}",
+        "=== Image Generator run log ===",
+        f"generator: image-generator v{__version__}",
         f"started_at: {datetime.now(timezone.utc).isoformat(timespec='seconds')} UTC",
         f"run_mode: {ctx.run_mode}",
         f"platform: {ctx.platform}",

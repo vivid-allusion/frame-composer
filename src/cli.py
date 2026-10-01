@@ -74,7 +74,7 @@ _ARGUMENTS: list[_ArgumentSpec] = [
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Vivid Allusion Frame Composer")
+    parser = argparse.ArgumentParser(description="Vivid Allusion Image Generator")
     parser.set_defaults(save_payloads=True)
 
     for arg in _ARGUMENTS:

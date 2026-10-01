@@ -1,4 +1,4 @@
-"""Tests for vehicle-side error placeholder images."""
+"""Tests for generator-side error placeholder images."""
 
 from pathlib import Path
 from types import SimpleNamespace

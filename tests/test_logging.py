@@ -207,13 +207,13 @@ class TestPerFileLogs:
         assert set(logs) == {"0-a.log", "1-b.log"}
         text = logs["0-a.log"]
         order = [
-            text.index("=== Frame Composer run log ==="),
+            text.index("=== Image Generator run log ==="),
             text.index("=== Payload ==="),
             text.index("=== Console output ==="),
             text.index("=== Run summary ==="),
         ]
         assert order == sorted(order)
-        assert "vehicle: frame-composer v" in text
+        assert "generator: image-generator v" in text
         assert "run_mode: studiolot" in text
         assert "platform: replicate" in text
         assert "engine: Stub" in text
@@ -255,10 +255,10 @@ class TestPerFileLogs:
 
         assert len(logs) == 1
         name = next(iter(logs))
-        assert name.startswith("frame_composer_")
+        assert name.startswith("image_generator_")
         text = logs[name]
         assert "=== Payload ===" not in text
-        assert "=== Frame Composer run log ===" in text
+        assert "=== Image Generator run log ===" in text
         assert "=== Console output ===" in text
         assert "=== Run summary ===" in text
         assert "a.md: error" in text

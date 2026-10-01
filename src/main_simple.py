@@ -1,7 +1,7 @@
-"""Vivid Allusion Frame Composer — migrated to Engine interface.
+"""Vivid Allusion Image Generator — migrated to Engine interface.
 
 Both studiolot and standalone modes share the same Engine-based execution.
-The Vehicle reads markdowns, loads an Engine, and calls engine.run().
+The Generator reads markdowns, loads an Engine, and calls engine.run().
 """
 
 import os
@@ -137,7 +137,7 @@ def _run_with_progress(engine: Any, inputs: list[Any]) -> list[Any]:
     """Run the engine under a live Progress display.
 
     The display swaps the engine's private ``_on_progress`` callback for the
-    duration of the run (the de-facto Vehicle↔Engine progress contract) and
+    duration of the run (the de-facto Generator↔Engine progress contract) and
     restores it afterwards.
     """
     from rich.progress import (
@@ -213,7 +213,7 @@ def main() -> int:
     setup_logging(debug=args.debug, verbose=args.verbose)
 
     logger.debug("=" * 60)
-    logger.debug(f"Vivid Allusion Frame Composer v{__version__}")
+    logger.debug(f"Vivid Allusion Image Generator v{__version__}")
     logger.debug("=" * 60)
 
     try:
@@ -296,8 +296,8 @@ def _run_standalone(args) -> int:
         sys.stderr.write(
             "\nThanks for supplying your API key. "
             "To make the script operational, pick a profile YAML\n"
-            "from frame-composer/USER-FILES/02.STANDBY/ and copy it to\n"
-            "frame-composer/USER-FILES/03.PROFILES/, then re-run.\n"
+            "from image-generator/USER-FILES/02.STANDBY/ and copy it to\n"
+            "image-generator/USER-FILES/03.PROFILES/, then re-run.\n"
         )
         return 1
 

@@ -66,13 +66,13 @@
 ## Architecture: Engine Interface
 
 ### Core Concept
-The Frame Composer (Vehicle) delegates all API/provider logic to Engine plugins.
-"The Vehicle orchestrates. The Engine executes. The profile configures."
+The Image Generator (Generator) delegates all API/provider logic to Engine plugins.
+"The Generator orchestrates. The Engine executes. The profile configures."
 
 ### Engine Loading
 - `src/engine_loader.py` — vendored byte-identical snapshot of studiolot's
   `pipeline/engine_loader.py` (**canonical home** — change there first, then
-  re-vendor; verify with a three-way diff against MC)
+  re-vendor; verify with a three-way diff against VG)
 - Uses `EngineLoadContext` dataclass (single param: `load_engine(ctx)`)
 - Searches `search_paths` for `engine-<platform>/` directories
 - Local clones take precedence over pip-installed packages (VEHICLE_CONTRACT §2b)
@@ -129,7 +129,7 @@ main() → _run_studiolot()
 | `src/processing/first_run.py` | `handle_first_run()` — engine check, wizard launch, STANDBY seeding; extracted from `_run_standalone()` |
 | `src/processing/profiles.py` | Profile loading (standalone + studiolot) via `_parse_profile_yaml()`, empty-STANDBY guidance |
 | `src/processing/payload.py` | Generation payload: `compose_payload()` (recipe JSON schema v1, optional `error` field) + `error_info()` + `fit_payload()` + `compose_run_payloads()` (once-per-run composition) + `embed_payloads()` + `inject_payload()`/`read_payload()` |
-| `src/processing/placeholders.py` | Vehicle-side error placeholders: `write_placeholders()` + `derive_size()` + `render_placeholder()` (Pillow) |
+| `src/processing/placeholders.py` | Generator-side error placeholders: `write_placeholders()` + `derive_size()` + `render_placeholder()` (Pillow) |
 | `src/processing/payload_containers.py` | Pure byte transforms: XMP packet serializer, PNG iTXt / JPEG APP1 / WebP `XMP ` chunk envelopes + readers, `detect_format()` |
 | `src/processing/context.py` | `PipelineContext` dataclass — shared orchestration state for payload/placeholder/log stages |
 | `src/processing/results.py` | `is_success()` + `success_paths()` — single source of truth for the "ok + has path" result filter |
@@ -156,29 +156,29 @@ main() → _run_studiolot()
 
 ## Twin files — agreed vs accepted divergence (W5 M5, 2026-09-30)
 
-W5 phase_5 settled the studiolot/FC/MC twin set. Each row names the file, the
+W5 phase_5 settled the studiolot/IG/VG twin set. Each row names the file, the
 verdict, and — for a divergence — the one-line reason. **accepted divergence**
-is deliberate: do not "fix" such a file back to the other Vehicle's copy. The
+is deliberate: do not "fix" such a file back to the other Generator's copy. The
 canonical Engine loader is `~/MISC/studiolot/aisl/engines.py`.
 
 | File | Verdict | Reason |
 |---|---|---|
-| `src/engine_loader.py` | **re-vendored (agreed)** | the *loader half* of `aisl/engines.py`; byte-identical in FC and MC and to the canonical loader body (three-way diff clean), docstring naming the canonical path. |
+| `src/engine_loader.py` | **re-vendored (agreed)** | the *loader half* of `aisl/engines.py`; byte-identical in IG and VG and to the canonical loader body (three-way diff clean), docstring naming the canonical path. |
 | `tests/conftest.py` | **agreed** | already byte-identical (6/6) across the twins — re-vendor was a no-op. |
-| `src/auth/env.py` | **agreed** | the only difference was one blank line; FC's form is now shared. |
-| `src/utils/logging.py` | **accepted divergence** | FC's image-pipeline run-log writer (`_TerminalCleaner`, `_build_header`/`_build_summary`, `write_run_logs(header, payload, capture, summary)`); MC's module has a different public API. |
-| `src/processing/markdown_parser.py` | **accepted divergence** | FC's parser (227 lines, 10 defs) extracts still-image payloads; MC's (289, 7 defs) parses video duration/fps. |
-| `src/engine_helpers.py` | **accepted divergence** | FC's helpers (173 lines, 9 defs) vs MC's (218, 10) which adds `find_vehicle_engines_dir` and `auto_install_engine(vehicle_root=…)`. |
-| `src/cli.py` | **accepted divergence** | each generator's own front-end flags (FC's declarative `_ArgumentSpec` table; `--force-png` is FC-only). |
-| `run.py` | **accepted divergence** | each Vehicle's own bootstrap and launch target. |
-| `src/processing/profiles.py` | **accepted divergence** | FC's 36-line still-image profile vs MC's 86-line video profile with `normalize_legacy_profile`. |
-| `src/utils/path_resolver.py` | **accepted divergence** | FC returns a `Path`; MC returns `(Path, project_name)` and uses the `_VID` output suffix. |
-| `src/constants.py` | **accepted divergence** | per-Vehicle identity: `__version__` 2.1.0 vs 1.0.0 and `MEDIA_TYPE` IMG vs VID. |
-| `src/exceptions.py` | **accepted divergence** | MC adds `ValidationError`. |
-| `src/datatypes.py` | **accepted divergence** | the Markdown payload shape: MC adds `frames`/`duration`/`references`. |
-| `src/engine_contract.py` | **accepted divergence** | the per-Vehicle mirror of the contract's interface notes. |
+| `src/auth/env.py` | **agreed** | the only difference was one blank line; IG's form is now shared. |
+| `src/utils/logging.py` | **accepted divergence** | IG's image-pipeline run-log writer (`_TerminalCleaner`, `_build_header`/`_build_summary`, `write_run_logs(header, payload, capture, summary)`); VG's module has a different public API. |
+| `src/processing/markdown_parser.py` | **accepted divergence** | IG's parser (227 lines, 10 defs) extracts still-image payloads; VG's (289, 7 defs) parses video duration/fps. |
+| `src/engine_helpers.py` | **accepted divergence** | IG's helpers (173 lines, 9 defs) vs VG's (218, 10) which adds `find_generator_engines_dir` and `auto_install_engine(generator_root=…)`. |
+| `src/cli.py` | **accepted divergence** | each generator's own front-end flags (IG's declarative `_ArgumentSpec` table; `--force-png` is IG-only). |
+| `run.py` | **accepted divergence** | each Generator's own bootstrap and launch target. |
+| `src/processing/profiles.py` | **accepted divergence** | IG's 36-line still-image profile vs VG's 86-line video profile with `normalize_legacy_profile`. |
+| `src/utils/path_resolver.py` | **accepted divergence** | IG returns a `Path`; VG returns `(Path, project_name)` and uses the `_VID` output suffix. |
+| `src/constants.py` | **accepted divergence** | per-Generator identity: `__version__` 2.1.0 vs 1.0.0 and `MEDIA_TYPE` IMG vs VID. |
+| `src/exceptions.py` | **accepted divergence** | VG adds `ValidationError`. |
+| `src/datatypes.py` | **accepted divergence** | the Markdown payload shape: VG adds `frames`/`duration`/`references`. |
+| `src/engine_contract.py` | **accepted divergence** | the per-Generator mirror of the contract's interface notes. |
 | `src/processing/first_run.py` | **accepted divergence** | same length, different first-run flows and helper imports (diffed, not assumed). |
-| `src/main_simple.py` | **slated — kept** by Owner ruling Q3 (2026-09-30) | FC's live entry point (`pyproject.toml` console script, `run.py` target, a test import) — not dead code; no removal, no rename. |
+| `src/main_simple.py` | **slated — kept** by Owner ruling Q3 (2026-09-30) | IG's live entry point (`pyproject.toml` console script, `run.py` target, a test import) — not dead code; no removal, no rename. |
 
 ---
 

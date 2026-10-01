@@ -26,8 +26,8 @@ Local machine ──▶ B2 bucket ──▶ AI APIs
 - **AI Studio Lot TUI (`studiolot`)** — the dashboard. It manages projects,
   applications, presets, the generation queue, and sync. It decides *what* to
   run and composes the configuration for each run.
-- **Vehicles (`frame-composer`, `motion-conductor`)** — the generation scripts.
-  Frame Composer makes images; Motion Conductor makes video. A Vehicle parses
+- **Generators (`image-generator`, `video-generator`)** — the generation scripts.
+  Image Generator makes images; Video Generator makes video. A Generator parses
   the inputs, loads an Engine, runs the generation, and writes the results and
   logs.
 - **Engines (`engine-*`)** — thin, uniform wrappers around one provider's SDK
@@ -35,8 +35,8 @@ Local machine ──▶ B2 bucket ──▶ AI APIs
 - **Extensions** — community apps, in-process plugins, and utilities, built from
   the `extension-starter-*` templates.
 
-> **The core contract: the Vehicle orchestrates, the Engine executes, the
-> profile configures.** A Vehicle never imports a provider SDK directly — it
+> **The core contract: the Generator orchestrates, the Engine executes, the
+> profile configures.** A Generator never imports a provider SDK directly — it
 > calls the Engine. That is what lets new models and providers drop in without
 > touching the generation scripts.
 
@@ -74,7 +74,7 @@ re-enter any input list, so the pipeline is iterative rather than linear.
 A **profile** is the configuration for one run: platform, endpoint, parameters,
 prompt prefix/suffix, and paths. When you generate from the TUI, the profile is
 *composed* for you from the application instance plus the selected prompt
-preset. Run a Vehicle standalone and it reads a profile from its own
+preset. Run a Generator standalone and it reads a profile from its own
 `USER-FILES/03.PROFILES/` folder instead.
 
 **Endpoint definitions** (the catalog of models and their parameters) live in
@@ -88,8 +88,8 @@ one of the highest-impact contributions you can make.
 | TUI behaviour, project model, sync, queue | `studiolot` (`console/`, `pipeline/`) |
 | A new model endpoint or provider parameter | the relevant `engine-*` repo (TOML catalog) |
 | Provider SDK logic, auth, request shaping | the relevant `engine-*` repo (Engine code) |
-| Generation behaviour for images | `frame-composer` |
-| Generation behaviour for video | `motion-conductor` |
+| Generation behaviour for images | `image-generator` |
+| Generation behaviour for video | `video-generator` |
 | A community app, plugin, or utility | start from `extension-starter-*` |
 
 Interface changes follow one rule: **`engine-replicate` is the reference.** A

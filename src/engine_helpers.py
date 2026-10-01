@@ -54,8 +54,8 @@ def print_engine_not_found(platform: str) -> None:
 
 
 def auto_install_engine(platform: str) -> bool:
-    vehicle_root = Path(__file__).resolve().parent.parent
-    engines_dir = vehicle_root / "ENGINES"
+    generator_root = Path(__file__).resolve().parent.parent
+    engines_dir = generator_root / "ENGINES"
     engines_dir.mkdir(exist_ok=True)
     target = engines_dir / f"engine-{platform}"
 

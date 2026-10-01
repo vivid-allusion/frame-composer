@@ -59,7 +59,7 @@ def compose_payload(
     payload: dict[str, Any] = {
         "schema": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "vehicle": {"name": "frame-composer", "version": __version__},
+        "generator": {"name": "image-generator", "version": __version__},
         "engine": {
             "platform": ctx.platform,
             "provider": getattr(ctx.engine, "PROVIDER_NAME", ctx.platform),

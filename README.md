@@ -1,14 +1,14 @@
-# Vivid Allusion Frame Composer
+# Vivid Allusion Image Generator
 
 ## Purpose
 
-Frame Composer (the **Vehicle**) processes markdown prompt files into generated images. It does not talk to any AI provider directly — all provider logic lives in **Engine** plugins ("The Vehicle orchestrates. The Engine executes. The profile configures."). Supported platforms: `replicate`, `fal`, `openrouter`, `google`.
+Image Generator (the **Generator**) processes markdown prompt files into generated images. It does not talk to any AI provider directly — all provider logic lives in **Engine** plugins ("The Generator orchestrates. The Engine executes. The profile configures."). Supported platforms: `replicate`, `fal`, `openrouter`, `google`.
 
 ## Architecture
 
 | Component | Role |
 |---|---|
-| `src/` | Vehicle: CLI, markdown parsing, profiles, auth, payload embedding, placeholders, run logs |
+| `src/` | Generator: CLI, markdown parsing, profiles, auth, payload embedding, placeholders, run logs |
 | `ENGINES/engine-<platform>/` | Engine plugins (git clones or pip packages), loaded via `src/engine_loader.py` |
 | `USER-FILES/03.PROFILES/` | Active profile YAML (model + parameters) — pick one from `02.STANDBY/` |
 
@@ -20,9 +20,9 @@ Frame Composer (the **Vehicle**) processes markdown prompt files into generated 
 ## Directory Structure
 
 ```
-frame-composer/
+image-generator/
 ├── run.py               # Bootstrap: venv + deps + launches src.main_simple
-├── src/                 # Vehicle code
+├── src/                 # Generator code
 ├── tests/               # pytest suite
 ├── ENGINES/             # Engine plugin clones (auto-installed on first run)
 ├── USER-FILES/
@@ -101,7 +101,7 @@ USER-FILES/05.OUTPUT/YYMMDD_HHMMSS_IMG/
 
 - Each image embeds its generation payload (prompt, endpoint, parameters) as XMP metadata in PNG/JPEG/WebP — inspect with exiftool/ImageMagick
 - Failed generations (in a mixed run) get red error-placeholder images so the output serial stays intact
-- All-failed runs exit 1 with a fallback `frame_composer_<ts>.log`
+- All-failed runs exit 1 with a fallback `image_generator_<ts>.log`
 
 ## Authentication
 

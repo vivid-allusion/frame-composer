@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for considering a contribution. The projects under the `vivid-allusion`
-org — **AI Studio Lot (`studiolot`)**, **Frame Composer**, **Motion Conductor**,
+org — **AI Studio Lot (`studiolot`)**, **Image Generator**, **Video Generator**,
 and the **`engine-*`** wrappers — are free, open source, and built in the open.
 Issues, pull requests, and documentation improvements are all welcome.
 
@@ -11,7 +11,7 @@ or niche model is often a single TOML file.
 ## Before you start
 
 Read [`ARCHITECTURE.md`](ARCHITECTURE.md) so you know where your change belongs.
-The short version: the TUI decides *what* to run, Vehicles do the generation,
+The short version: the TUI decides *what* to run, Generators do the generation,
 and Engines talk to providers.
 
 ## Setup
@@ -25,9 +25,9 @@ pip install -e .        # Python 3.11+
 studiolot               # launches the TUI (first run onboards you)
 ```
 
-For the Vehicles and Engines, clone the repo you're changing and install its
+For the Generators and Engines, clone the repo you're changing and install its
 requirements (each repo's `README.md` has the specifics). The `run.py`
-bootstrap in each Vehicle creates and repairs its own virtual environment, so
+bootstrap in each Generator creates and repairs its own virtual environment, so
 `python run.py` works from a clean checkout.
 
 ## Tests
@@ -41,7 +41,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests/ -v
 ```
 
-**Vehicles (Python):**
+**Generators (Python):**
 
 ```bash
 python -m pytest tests/ -v
@@ -60,7 +60,7 @@ full environment, mark it `integration` so it can be skipped.
 ## Conventions
 
 - **Python:** PEP 8. `ruff` for linting, `mypy` for types (studiolot); `black` +
-  `ruff` (Vehicles). Type hints on function signatures, `pathlib.Path` for file
+  `ruff` (Generators). Type hints on function signatures, `pathlib.Path` for file
   work.
 - **Keep files focused.** Split before a file sprawls; small, cohesive modules
   beat clever ones.

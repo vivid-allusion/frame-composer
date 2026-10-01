@@ -1,4 +1,4 @@
-"""Vehicle-side error placeholder images for failed generations.
+"""Generator-side error placeholder images for failed generations.
 
 Failed results get a red card with the error text written to the exact
 path the engine reserved (expected_path), so the output serial stays

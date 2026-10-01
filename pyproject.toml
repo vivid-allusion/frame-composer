@@ -1,7 +1,7 @@
 [project]
-name = "frame-composer"
+name = "image-generator"
 version = "2.1.0"
-description = "Vivid Allusion Frame Composer"
+description = "Vivid Allusion Image Generator"
 requires-python = ">=3.10"
 dependencies = [
     "loguru",
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-frame-composer = "src.main_simple:main"
+image-generator = "src.main_simple:main"
 
 [tool.ruff]
 target-version = "py310"

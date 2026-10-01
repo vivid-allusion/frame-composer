@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Convenience wrapper to run the Frame Composer tool.
+Convenience wrapper to run the Image Generator tool.
 Automatically handles complete environment setup - zero manual steps required.
 
 This script:

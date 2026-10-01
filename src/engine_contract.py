@@ -1,4 +1,4 @@
-"""Shared contract between Vehicle and Engine plugins.
+"""Shared contract between Generator and Engine plugins.
 
 Defines the expected interface for Engine.InputFile so that _build_inputs()
 can validate compatibility at import time rather than crashing at runtime.

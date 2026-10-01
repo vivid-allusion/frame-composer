@@ -1,5 +1,5 @@
 wrapper:
-  name: "Frame Composer"
+  name: "Image Generator"
   version: "2.0.0"
   timeout: 120
   max_retries: 3

@@ -205,7 +205,7 @@ def read_markdown_files(input_dir: Path) -> list[MarkdownFile]:
                 # Fail loud: a Markdown file that declared media references with
                 # unreachable URLs is rejected, never silently downgraded to
                 # text-to-image (that changed the author's intent). Parity
-                # with motion-conductor's markdown_parser, which rejects too.
+                # with video-generator's markdown_parser, which rejects too.
                 logger.error(
                     f"Rejected {md_path.name}: {len(invalid)} of {len(urls)} "
                     "media URL(s) unreachable"
