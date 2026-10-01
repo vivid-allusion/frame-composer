@@ -156,7 +156,7 @@ def validate_image_urls(
     Returns:
         Tuple of (valid_urls, invalid_urls). Invalid URLs are stripped.
     """
-    headers = {"User-Agent": "FrameComposer/1.0"}
+    headers = {"User-Agent": "ImageGenerator/1.0"}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         checks = list(pool.map(lambda url: _check_url(url, headers, timeout), urls))
     valid = [url for url, ok in zip(urls, checks) if ok]
