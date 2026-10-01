@@ -1,12 +1,12 @@
 """Canonical Engine discovery and loading — vendored from studiolot.
 
 Per ENGINE_CONTRACT.md §6/§7a: the canonical implementation of load_engine()
-lives in ~/MISC/studiolot/aisl/engines.py. This file is the Generator's
+lives in ~/MISC/studiolot/hc/engines.py. This file is the Generator's
 byte-identical snapshot of that module's *loader half* — change the canonical
 first, then re-vendor (verify with a three-way diff).
 
-accepted divergence (W5 M5): aisl/engines.py is a facet — it also imports
-aisl.engine_registry and aisl.surface and exports `engines_list` / `OPS`, which
+accepted divergence (W5 M5): hc/engines.py is a facet — it also imports
+hc.engine_registry and hc.surface and exports `engines_list` / `OPS`, which
 do not exist in a Generator. Only the loader functions below are vendored; this
 Generator's copy stays byte-identical to the other Generator's.
 """

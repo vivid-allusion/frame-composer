@@ -159,11 +159,11 @@ main() → _run_studiolot()
 W5 phase_5 settled the studiolot/IG/VG twin set. Each row names the file, the
 verdict, and — for a divergence — the one-line reason. **accepted divergence**
 is deliberate: do not "fix" such a file back to the other Generator's copy. The
-canonical Engine loader is `~/MISC/studiolot/aisl/engines.py`.
+canonical Engine loader is `~/MISC/studiolot/hc/engines.py`.
 
 | File | Verdict | Reason |
 |---|---|---|
-| `src/engine_loader.py` | **re-vendored (agreed)** | the *loader half* of `aisl/engines.py`; byte-identical in IG and VG and to the canonical loader body (three-way diff clean), docstring naming the canonical path. |
+| `src/engine_loader.py` | **re-vendored (agreed)** | the *loader half* of `hc/engines.py`; byte-identical in IG and VG and to the canonical loader body (three-way diff clean), docstring naming the canonical path. |
 | `tests/conftest.py` | **agreed** | already byte-identical (6/6) across the twins — re-vendor was a no-op. |
 | `src/auth/env.py` | **agreed** | the only difference was one blank line; IG's form is now shared. |
 | `src/utils/logging.py` | **accepted divergence** | IG's image-pipeline run-log writer (`_TerminalCleaner`, `_build_header`/`_build_summary`, `write_run_logs(header, payload, capture, summary)`); VG's module has a different public API. |
