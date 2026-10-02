@@ -133,7 +133,13 @@ def embed_payloads(results: list[Any], payloads: dict[str, str]) -> None:
 def inject_payload(
     path: Path, payload: dict[str, Any] | None = None, text: str | None = None
 ) -> None:
-    """Embed payload in the file at path, replacing any previous payload."""
+    """Embed payload in the file at path, replacing any previous payload.
+
+    The existing packet is merged, not rebuilt: the recipe text in
+    dc:description is replaced while every sibling element (the IDE's cull
+    marks) is preserved, so a re-inject never drops marks. See
+    payload_containers for the per-format writers.
+    """
     data = path.read_bytes()
     if text is None:
         if payload is None:

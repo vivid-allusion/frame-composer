@@ -40,6 +40,31 @@ _NON_HTTP_URL = re.compile(
     r"!\[.*?\]\((?!https?://)(\.\.?/|\.\.?\\|//|/|data:|file:|ftp:|[A-Za-z]:\\|\w+://)[^\)]+\)"
 )
 _HTML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
+_STUDIO_FENCE = re.compile(r"^---\s*$")
+_STUDIO_ROOT_KEY = re.compile(r"^studio:\s*(?:#.*)?$")
+
+
+def _is_studio_root(line: str) -> bool:
+    """True when a line is a column-zero `studio:` marks root key."""
+    return not line[:1].isspace() and bool(_STUDIO_ROOT_KEY.match(line.strip()))
+
+
+def _studio_block_start(lines: list[str]) -> int | None:
+    """Index of the opening fence of a trailing `studio:` markdown block.
+
+    The IDE appends its cull marks as a `---`-fenced YAML block whose root key
+    is `studio:`. The block is metadata, not prompt or URL, so the parser skips
+    it whole. A fence is only recognised when the next non-blank line is the
+    root key at column zero, so a plain horizontal rule is never swallowed. No
+    YAML is parsed: a malformed block is skipped without error.
+    """
+    for index, line in enumerate(lines):
+        if not _STUDIO_FENCE.match(line.strip()):
+            continue
+        following = next((candidate for candidate in lines[index + 1 :] if candidate.strip()), None)
+        if following is not None and _is_studio_root(following):
+            return index
+    return None
 
 
 def _check_line(line: str, lineno: int, warn: Callable[[str], None] | None) -> None:
@@ -99,6 +124,9 @@ def parse_markdown(
     """
     markdown_content = _HTML_COMMENT_PATTERN.sub("", markdown_content)
     lines = markdown_content.split("\n")
+    skip_from = _studio_block_start(lines)
+    if skip_from is not None:
+        lines = lines[:skip_from]
     prompt = ""
     urls: list[str] = []
 

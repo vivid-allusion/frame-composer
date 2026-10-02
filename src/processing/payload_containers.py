@@ -14,11 +14,56 @@ _ESCAPES = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
 _UNESCAPES = {escaped: ch for ch, escaped in _ESCAPES.items()}
 _DESCRIPTION_OPEN = b"<dc:description>"
 _DESCRIPTION_CLOSE = b"</dc:description>"
+_DESCRIPTION_NS = b'xmlns:dc="http://purl.org/dc/elements/1.1/"'
+_RDF_DESCRIPTION = b"<rdf:Description"
 
 
-def xmp_packet(text: str) -> bytes:
-    """Serialize text as an XMP packet with the text in dc:description."""
+def _merge_packet(existing: bytes, escaped: str) -> bytes | None:
+    """Return `existing` with only its dc:description content replaced.
+
+    The rdf:Description attributes and every sibling element (the IDE's
+    studio:marks, xmp:Rating, xmp:Label) are preserved byte-for-byte. Returns
+    None when the packet has no rdf:Description to merge into.
+    """
+    content = escaped.encode()
+    start = existing.find(_DESCRIPTION_OPEN)
+    end = existing.find(_DESCRIPTION_CLOSE, start + len(_DESCRIPTION_OPEN)) if start >= 0 else -1
+    if start >= 0 and end >= 0:
+        head = existing[: start + len(_DESCRIPTION_OPEN)]
+        return head + content + existing[end:]
+    return _insert_description(existing, content)
+
+
+def _insert_description(existing: bytes, content: bytes) -> bytes | None:
+    """Insert a dc:description as the first child of an existing rdf:Description."""
+    pos = existing.find(_RDF_DESCRIPTION)
+    if pos < 0:
+        return None
+    end_tag = existing.find(b">", pos)
+    if end_tag < 0:
+        return None
+    xml = existing
+    if _DESCRIPTION_NS not in xml[pos:end_tag]:
+        marker = len(_RDF_DESCRIPTION)
+        xml = xml[: pos + marker] + b" " + _DESCRIPTION_NS + xml[pos + marker :]
+        end_tag = xml.find(b">", pos)
+    description = _DESCRIPTION_OPEN + content + _DESCRIPTION_CLOSE
+    return xml[: end_tag + 1] + description + xml[end_tag + 1 :]
+
+
+def xmp_packet(text: str, existing: bytes | None = None) -> bytes:
+    """Serialize text as an XMP packet with the text in dc:description.
+
+    When `existing` is given its packet bytes are preserved — attributes and
+    every sibling of dc:description (the IDE's cull marks) — and only the
+    dc:description content is replaced, so a re-inject keeps the marks. A fresh
+    packet is built when there is nothing to merge into.
+    """
     escaped = "".join(_ESCAPES.get(ch, ch) for ch in text)
+    if existing:
+        merged = _merge_packet(existing, escaped)
+        if merged is not None:
+            return merged
     return (
         '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
         '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
@@ -63,13 +108,14 @@ def _png_chunk(ctype: bytes, raw: bytes) -> bytes:
 
 
 def inject_png(data: bytes, text: str) -> bytes:
+    existing = read_png(data)
     chunks = [
         (ctype, raw)
         for ctype, raw in _png_chunks(data)
         if not (ctype.lower() == b"itxt" and raw.lower().startswith(XMP_KEYWORD.lower() + b"\x00"))
     ]
     iend = next(i for i, (ctype, _) in enumerate(chunks) if ctype == b"IEND")
-    packet = xmp_packet(text)
+    packet = xmp_packet(text, existing=existing)
     itxt = XMP_KEYWORD + b"\x00\x00\x00\x00\x00" + packet
     chunks.insert(iend, (b"iTXt", itxt))
     return data[:8] + b"".join(_png_chunk(t, r) for t, r in chunks)
@@ -92,13 +138,14 @@ def read_png(data: bytes) -> bytes | None:
 
 
 def inject_jpeg(data: bytes, text: str) -> bytes:
+    existing = read_jpeg(data)
     body = data[2:]
     # strip a payload segment previously inserted right after SOI
     if len(body) >= 4 and body.startswith(b"\xff\xe1"):
         length = struct.unpack(">H", body[2:4])[0]
         if body[4 : 4 + len(XMP_NAMESPACE)] == XMP_NAMESPACE:
             body = body[2 + length :]
-    packet = xmp_packet(text)
+    packet = xmp_packet(text, existing=existing)
     app1 = (
         b"\xff\xe1"
         + struct.pack(">H", len(packet) + len(XMP_NAMESPACE) + 2)
@@ -134,6 +181,7 @@ def read_jpeg(data: bytes) -> bytes | None:
 
 
 def inject_webp(data: bytes, text: str) -> bytes:
+    existing = read_webp(data)
     body, pos, kept = data[12:], 0, []
     while pos + 8 <= len(body):
         size = struct.unpack("<I", body[pos + 4 : pos + 8])[0]
@@ -141,7 +189,7 @@ def inject_webp(data: bytes, text: str) -> bytes:
         if body[pos : pos + 4] != b"XMP ":
             kept.append(body[pos : pos + step])
         pos += step
-    packet = xmp_packet(text)
+    packet = xmp_packet(text, existing=existing)
     chunk = (
         b"XMP " + struct.pack("<I", len(packet)) + packet + (b"\x00" if len(packet) & 1 else b"")
     )
